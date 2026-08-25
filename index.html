@@ -1,0 +1,2064 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>OBBY — Robot Test System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0b0d;
+    --panel:#111318;
+    --panel-2:#15171d;
+    --border:#22252c;
+    --border-soft:#1a1c22;
+    --text:#dcdee2;
+    --text-dim:#787d87;
+    --text-faint:#4a4e58;
+    --green:#4fd68a;
+    --green-dim:#2c6a4a;
+    --red:#f0655a;
+    --red-dim:#6b332e;
+    --amber:#e3a53d;
+    --amber-dim:#6b551e;
+    --cyan:#5ec3d6;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --sans: 'Space Grotesk', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--mono);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  #app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    height:100dvh;
+  }
+
+  /* ---------- Topbar ---------- */
+  #topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 18px;
+    height:52px;
+    min-height:52px;
+    border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, #0d0e11, #0a0b0d);
+  }
+  #brand{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+  }
+  #brand .mark{
+    font-family:var(--sans);
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:0.08em;
+    color:var(--text);
+  }
+  #brand .mark span{color:var(--green);}
+  #brand .sub{
+    font-size:11px;
+    color:var(--text-faint);
+    letter-spacing:0.04em;
+  }
+  #path{
+    font-size:12.5px;
+    color:var(--text-dim);
+    letter-spacing:0.02em;
+  }
+  #path .seg{color:var(--green);}
+  #tabs{
+    display:flex;
+    gap:2px;
+  }
+  #tabs button{
+    background:transparent;
+    border:1px solid transparent;
+    color:var(--text-faint);
+    font-family:var(--sans);
+    font-size:11.5px;
+    font-weight:600;
+    letter-spacing:0.04em;
+    padding:7px 12px;
+    border-radius:3px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    transition:color .15s, background .15s, border-color .15s;
+  }
+  #tabs button .num{color:var(--text-faint); font-weight:400;}
+  #tabs button:hover{color:var(--text); background:var(--panel-2);}
+  #tabs button.active{color:var(--green); background:var(--panel-2); border-color:var(--border);}
+  #tabs button.active .num{color:var(--green-dim);}
+  #tabs button:focus-visible{outline:1px solid var(--green); outline-offset:1px;}
+
+  /* ---------- Main ---------- */
+  main{
+    flex:1;
+    overflow:hidden;
+    position:relative;
+  }
+  .view{
+    position:absolute;
+    inset:0;
+    overflow-y:auto;
+    padding:22px 26px 90px;
+    opacity:0;
+    pointer-events:none;
+    transform:translateY(4px);
+    transition:opacity .16s ease, transform .16s ease;
+  }
+  .view.active{
+    opacity:1;
+    pointer-events:auto;
+    transform:none;
+  }
+  .view-header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:18px;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .view-title{
+    font-family:var(--sans);
+    font-size:20px;
+    font-weight:700;
+    letter-spacing:-0.01em;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .view-title .idx{color:var(--text-faint); font-family:var(--mono); font-size:13px; font-weight:400;}
+  .view-hint{font-size:11.5px; color:var(--text-faint);}
+
+  /* ---------- Terminal (persistent dock) ---------- */
+  #terminal-dock{
+    display:flex;
+    flex-direction:column;
+    height:230px;
+    min-height:120px;
+    max-height:80vh;
+    border-top:1px solid var(--border);
+    background:#0d0e11;
+    position:relative;
+  }
+  #app.terminal-expanded main{flex:0 0 0; opacity:0; pointer-events:none; overflow:hidden;}
+  #app.terminal-expanded #terminal-dock{flex:1; height:auto !important;}
+  #app.terminal-expanded #term-resize{display:none;}
+  #term-resize{
+    position:absolute;
+    top:-4px; left:0; right:0;
+    height:8px;
+    cursor:row-resize;
+    z-index:5;
+  }
+  #term-resize::after{
+    content:"";
+    position:absolute;
+    top:3px; left:50%;
+    transform:translateX(-50%);
+    width:36px; height:3px;
+    border-radius:2px;
+    background:var(--border);
+  }
+  #term-resize:hover::after{background:var(--text-faint);}
+  #term-scroll{
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    padding:10px 26px 0;
+  }
+  #term-log{
+    flex:1;
+    overflow-y:auto;
+    font-size:13px;
+    line-height:1.65;
+    padding-bottom:12px;
+  }
+  .term-line{white-space:pre-wrap; word-break:break-word;}
+  .term-line.cmd{color:var(--text-dim);}
+  .term-line.cmd::before{content:"OBBY:~$ "; color:var(--green);}
+  .term-line.out{color:var(--text);}
+  .term-line.ok{color:var(--green);}
+  .term-line.warn{color:var(--amber);}
+  .term-line.err{color:var(--red);}
+  .term-line.dim{color:var(--text-faint);}
+  .term-block{margin:2px 0 14px;}
+  .res-row{display:flex; gap:14px; margin:1px 0;}
+  .res-row .m{color:var(--text-dim); min-width:150px; display:inline-block;}
+  .res-row .v.ok{color:var(--green); font-weight:600;}
+  .res-row .v.no{color:var(--red); font-weight:600;}
+  .res-row .v.na{color:var(--text-faint);}
+  #term-input-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:12px 26px;
+    border-top:1px solid var(--border-soft);
+  }
+  #term-prompt{color:var(--green); font-size:13px; white-space:nowrap;}
+  #term-input-wrap{
+    position:relative;
+    flex:1;
+    display:flex;
+    align-items:center;
+  }
+  #term-ghost{
+    position:absolute;
+    inset:0;
+    font-family:var(--mono);
+    font-size:13px;
+    white-space:pre;
+    pointer-events:none;
+    display:flex;
+    align-items:center;
+    overflow:hidden;
+  }
+  #term-ghost .typed{color:transparent;}
+  #term-ghost .rest{color:var(--text-faint);}
+  #term-input{
+    position:relative;
+    z-index:1;
+    width:100%;
+    background:transparent;
+    border:none;
+    outline:none;
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:13px;
+    caret-color:var(--green);
+  }
+  #term-input::placeholder{color:var(--text-faint);}
+  #term-hint{
+    font-size:10.5px;
+    color:var(--text-faint);
+    white-space:nowrap;
+  }
+  #term-enter-btn{
+    display:none;
+    background:var(--green);
+    border:1px solid var(--green);
+    color:#0a0b0d;
+    font-family:var(--sans);
+    font-weight:700;
+    font-size:12px;
+    padding:9px 14px;
+    border-radius:5px;
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  #term-enter-btn:active{opacity:0.8;}
+
+  /* ---------- Dashboard ---------- */
+  .grid-missions{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px,1fr));
+    gap:12px;
+    margin-bottom:22px;
+  }
+  .mission-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:16px 16px 14px;
+    position:relative;
+    overflow:hidden;
+  }
+  .mission-card .mname{
+    font-family:var(--sans);
+    font-size:11.5px;
+    font-weight:600;
+    letter-spacing:0.05em;
+    color:var(--text-dim);
+    text-transform:uppercase;
+  }
+  .mission-card .mlabel{font-size:11px; color:var(--text-faint); margin-top:1px;}
+  .mission-card .mpct{
+    font-family:var(--sans);
+    font-size:34px;
+    font-weight:700;
+    margin-top:8px;
+    letter-spacing:-0.02em;
+  }
+  .mission-card .mbar{
+    height:3px;
+    background:var(--border-soft);
+    border-radius:2px;
+    margin-top:10px;
+    overflow:hidden;
+  }
+  .mission-card .mbar i{display:block; height:100%; background:var(--green);}
+  .mission-card.low .mpct{color:var(--red);}
+  .mission-card.low .mbar i{background:var(--red);}
+  .mission-card.mid .mpct{color:var(--amber);}
+  .mission-card.mid .mbar i{background:var(--amber);}
+  .mission-card.high .mpct{color:var(--green);}
+
+  .section-label{
+    font-family:var(--sans);
+    font-size:11.5px;
+    font-weight:700;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    margin:26px 0 10px;
+  }
+  .attn-list{display:flex; flex-direction:column; gap:6px;}
+  .attn-item{
+    display:flex;
+    gap:10px;
+    align-items:flex-start;
+    font-size:13px;
+    padding:9px 12px;
+    border-radius:5px;
+    background:var(--panel);
+    border:1px solid var(--border-soft);
+    border-left:2px solid var(--text-faint);
+  }
+  .attn-item.warn{border-left-color:var(--amber); color:var(--text);}
+  .attn-item.warn .ic{color:var(--amber);}
+  .attn-item.ok{border-left-color:var(--green-dim); color:var(--text-dim);}
+  .attn-item.ok .ic{color:var(--green);}
+
+  .rounds-strip{display:flex; flex-direction:column; gap:4px;}
+  .round-chip{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    font-size:12.5px;
+    padding:7px 10px;
+    background:var(--panel);
+    border:1px solid var(--border-soft);
+    border-radius:4px;
+  }
+  .round-chip .rid{color:var(--text-faint); min-width:28px;}
+  .round-chip .seq{display:flex; gap:6px;}
+  .round-chip .seq b.ok{color:var(--green);}
+  .round-chip .seq b.no{color:var(--red);}
+  .round-chip .flag{color:var(--text-faint); margin-left:auto; font-size:11px;}
+  .round-chip.invalid{opacity:0.55;}
+  .round-chip.invalid .flag{color:var(--red);}
+
+  /* ---------- Evolução ---------- */
+  #evo-controls{display:flex; gap:6px; margin-bottom:18px; flex-wrap:wrap;}
+  #evo-controls button{
+    background:var(--panel);
+    border:1px solid var(--border);
+    color:var(--text-dim);
+    font-family:var(--sans);
+    font-size:11.5px;
+    font-weight:600;
+    padding:7px 12px;
+    border-radius:4px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  #evo-controls button .dot{width:7px; height:7px; border-radius:50%; background:var(--text-faint);}
+  #evo-controls button.on{color:var(--text); border-color:var(--border);}
+  #evo-controls button[data-k="overall"].on .dot{background:var(--text);}
+  #evo-controls button[data-k="m1"].on .dot{background:var(--green);}
+  #evo-controls button[data-k="m2"].on .dot{background:var(--amber);}
+  #evo-controls button[data-k="m3"].on .dot{background:var(--cyan);}
+  #chart-wrap{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:18px 14px 8px;
+    margin-bottom:24px;
+  }
+  #evo-legend{display:flex; gap:16px; font-size:11px; color:var(--text-faint); margin-top:6px; flex-wrap:wrap;}
+  #evo-legend span{display:flex; align-items:center; gap:5px;}
+  #evo-legend i{width:8px; height:8px; border-radius:50%; display:inline-block;}
+
+  .evo-table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  .evo-table th{
+    text-align:left;
+    font-family:var(--sans);
+    font-size:10.5px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--text-faint);
+    font-weight:600;
+    padding:8px 10px;
+    border-bottom:1px solid var(--border);
+  }
+  .evo-table td{padding:8px 10px; border-bottom:1px solid var(--border-soft); color:var(--text-dim);}
+  .evo-table tr:last-child td{color:var(--text); font-weight:600;}
+
+  /* ---------- Relatórios ---------- */
+  .stat-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(140px,1fr));
+    gap:10px;
+    margin-bottom:24px;
+  }
+  .stat-box{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:13px 14px;
+  }
+  .stat-box .sv{font-family:var(--sans); font-size:22px; font-weight:700;}
+  .stat-box .sl{font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.05em; margin-top:2px;}
+  .stat-box.pos .sv{color:var(--green);}
+  .stat-box.neg .sv{color:var(--red);}
+  .stat-box.warnv .sv{color:var(--amber);}
+
+  .report-row{
+    display:flex;
+    justify-content:space-between;
+    padding:8px 0;
+    border-bottom:1px solid var(--border-soft);
+    font-size:13px;
+  }
+  .report-row .k{color:var(--text-dim);}
+  .report-row .v{color:var(--text); font-weight:600;}
+
+  .note-item{
+    font-size:12.5px;
+    padding:9px 11px;
+    background:var(--panel);
+    border:1px solid var(--border-soft);
+    border-radius:5px;
+    margin-bottom:6px;
+    color:var(--text-dim);
+  }
+  .note-item .tag{color:var(--text-faint); margin-right:6px;}
+  .note-item.correction .orig{color:var(--red); text-decoration:line-through; opacity:0.75;}
+  .note-item.correction .arrow{color:var(--text-faint); margin:0 6px;}
+  .note-item.correction .new{color:var(--green);}
+  .note-item.correction .reason{display:block; margin-top:3px; color:var(--text-faint);}
+
+  /* ---------- Dados (importar/exportar) ---------- */
+  .data-test-card{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:13px 16px;
+    margin-bottom:8px;
+    flex-wrap:wrap;
+  }
+  .data-test-card .dtc-info{display:flex; flex-direction:column; gap:2px;}
+  .data-test-card .dtc-name{font-family:var(--sans); font-weight:700; font-size:13.5px;}
+  .data-test-card .dtc-meta{font-size:11.5px; color:var(--text-faint);}
+  .data-test-card .dtc-actions{display:flex; gap:8px;}
+  .data-test-card button{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:11px;
+    font-weight:600;
+    padding:7px 11px;
+    border-radius:4px;
+    cursor:pointer;
+  }
+  .data-test-card button:hover{border-color:var(--green); color:var(--green);}
+  .data-import-row{margin-bottom:18px;}
+  .data-import-row button{
+    background:var(--green-dim);
+    border:1px solid var(--green);
+    color:var(--bg);
+    background:var(--green);
+    font-family:var(--sans);
+    font-weight:700;
+    font-size:12px;
+    padding:9px 16px;
+    border-radius:5px;
+    cursor:pointer;
+  }
+
+  /* ---------- Ajuda ---------- */
+  .ajuda-group{margin-bottom:22px;}
+  .ajuda-group h4{
+    font-family:var(--sans);
+    font-size:11.5px;
+    font-weight:700;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--green);
+    margin:0 0 8px;
+  }
+  .ajuda-row{
+    display:flex;
+    gap:14px;
+    padding:7px 0;
+    border-bottom:1px solid var(--border-soft);
+    font-size:12.5px;
+    flex-wrap:wrap;
+  }
+  .ajuda-row code{
+    color:var(--cyan);
+    background:var(--panel-2);
+    padding:2px 6px;
+    border-radius:3px;
+    min-width:170px;
+    display:inline-block;
+    font-size:12px;
+  }
+  .ajuda-row span.desc{color:var(--text-dim); flex:1;}
+  .ajuda-group.hidden{display:none;}
+  .ajuda-row.hidden{display:none;}
+
+  /* ---------- Bottom nav (mobile) ---------- */
+  #bottomnav{
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    height:56px;
+    min-height:56px;
+    border-top:1px solid var(--border);
+    background:#0d0e11;
+    padding:0 8px;
+  }
+  #bottomnav button.arrow{
+    background:none; border:none; color:var(--text-dim);
+    font-size:20px; padding:10px 18px; font-family:var(--mono);
+  }
+  #bottomnav button.arrow:active{color:var(--green);}
+  #bottomnav-label{
+    font-family:var(--sans);
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:0.05em;
+    color:var(--green);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  #bottomnav-dots{display:flex; gap:5px; margin-top:4px;}
+  #bottomnav-dots i{width:5px; height:5px; border-radius:50%; background:var(--border);}
+  #bottomnav-dots i.on{background:var(--green);}
+
+  ::-webkit-scrollbar{width:8px; height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--border); border-radius:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  @media (max-width: 720px){
+    #tabs{display:none;}
+    #bottomnav{display:flex;}
+    .view{padding:16px 14px 14px;}
+    #term-scroll{padding:8px 14px 0;}
+    #term-input-row{padding:8px 14px 10px; border-top:none;}
+    /* No mobile, o terminal deixa de ser um dock onipresente por cima
+       das outras telas — ele só aparece quando a própria aba Terminal
+       está ativa (via a classe terminal-expanded), ocupando a tela
+       inteira nesse momento. Nas outras abas (Dashboard, Evolução,
+       Relatórios, Dados, Ajuda) ele fica escondido, sem tomar espaço. */
+    #terminal-dock{display:none; height:170px;}
+    #app.terminal-expanded #terminal-dock{display:flex;}
+    #brand .sub{display:none;}
+    #path{display:none;}
+    #term-hint{display:none;}
+    #term-enter-btn{display:inline-flex; align-items:center; justify-content:center;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .view{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <div id="brand">
+      <div class="mark">OBBY<span>_</span></div>
+      <div class="sub">Robot Test System</div>
+    </div>
+    <div id="path">OBBY:~<span class="seg" id="path-seg">/terminal</span>$</div>
+    <div id="tabs">
+      <button data-view="terminal"><span class="num">01</span> Terminal</button>
+      <button data-view="dashboard"><span class="num">02</span> Dashboard</button>
+      <button data-view="evolucao"><span class="num">03</span> Evolução</button>
+      <button data-view="relatorios"><span class="num">04</span> Relatórios</button>
+      <button data-view="dados"><span class="num">05</span> Dados</button>
+      <button data-view="ajuda"><span class="num">06</span> Ajuda</button>
+    </div>
+  </div>
+
+  <main>
+    <section class="view" id="view-dashboard">
+      <div class="view-header">
+        <div class="view-title"><span class="idx">02/</span>Dashboard</div>
+        <div class="view-hint" id="dash-testname"></div>
+      </div>
+      <div class="grid-missions" id="mission-cards"></div>
+      <div class="section-label">Pontos de atenção</div>
+      <div class="attn-list" id="attn-list"></div>
+      <div class="section-label">Últimas rodadas</div>
+      <div class="rounds-strip" id="last-rounds"></div>
+    </section>
+
+    <section class="view" id="view-evolucao">
+      <div class="view-header">
+        <div class="view-title"><span class="idx">03/</span>Evolução</div>
+        <div class="view-hint">por teste</div>
+      </div>
+      <div id="evo-controls"></div>
+      <div id="chart-wrap">
+        <svg id="chart-svg" viewBox="0 0 640 240" preserveAspectRatio="none" style="width:100%;height:220px;display:block;"></svg>
+        <div id="evo-legend"></div>
+      </div>
+      <div class="section-label">Por teste</div>
+      <table class="evo-table" id="evo-table"></table>
+    </section>
+
+    <section class="view" id="view-relatorios">
+      <div class="view-header">
+        <div class="view-title"><span class="idx">04/</span>Relatórios</div>
+        <div class="view-hint">histórico completo</div>
+      </div>
+      <div class="stat-grid" id="report-stats"></div>
+      <div class="section-label">Sucesso por missão (geral)</div>
+      <div id="report-missions"></div>
+      <div class="section-label">Observações</div>
+      <div id="report-notes"></div>
+      <div class="section-label">Correções</div>
+      <div id="report-corrections"></div>
+    </section>
+
+    <section class="view" id="view-dados">
+      <div class="view-header">
+        <div class="view-title"><span class="idx">05/</span>Dados</div>
+        <div class="view-hint">importar / exportar / sincronização</div>
+      </div>
+      <div class="section-label">Armazenamento</div>
+      <div id="storage-status" class="stat-grid"></div>
+      <div class="section-label">Testes</div>
+      <div id="dados-tests-list"></div>
+      <div class="section-label">Backup completo</div>
+      <div class="attn-list">
+        <div class="attn-item">
+          <span class="ic">i</span>
+          <span>Formato próprio <b>.obby</b> (backup completo: testes, rodadas, comentários, tags e histórico) — planejado, ainda não implementado nesta versão.</span>
+        </div>
+        <div class="attn-item">
+          <span class="ic">i</span>
+          <span>Conta/projeto com acesso aos mesmos dados em vários dispositivos (via API + banco online) — depende de um backend real e ainda não existe neste protótipo. Hoje os dados ficam somente neste dispositivo/navegador.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-ajuda">
+      <div class="view-header">
+        <div class="view-title"><span class="idx">06/</span>Ajuda</div>
+        <div class="view-hint">documentação dos comandos</div>
+      </div>
+      <input id="ajuda-search" type="text" placeholder="Pesquisar comando… (ex: sincronizar, tags, voltar)"
+        style="width:100%; background:var(--panel); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:13px; padding:10px 12px; border-radius:5px; margin-bottom:18px; outline:none;">
+      <div id="ajuda-content"></div>
+    </section>
+  </main>
+
+  <div id="terminal-dock">
+    <div id="term-resize"></div>
+    <div id="term-scroll">
+      <div id="term-log"></div>
+      <div id="term-input-row">
+        <span id="term-prompt">OBBY:~$</span>
+        <div id="term-input-wrap">
+          <div id="term-ghost"></div>
+          <input id="term-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="SNS · @5 · #nota · !12 · /ajuda · cd dashboard · cls">
+        </div>
+        <button id="term-enter-btn" type="button" aria-label="Enviar comando">Enter</button>
+        <span id="term-hint">Tab completa</span>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:none">
+
+  <div id="bottomnav">
+    <button class="arrow" id="nav-left">←</button>
+    <div id="bottomnav-label">
+      <span id="bottomnav-text">TERMINAL</span>
+      <div id="bottomnav-dots">
+        <i data-i="0"></i><i data-i="1"></i><i data-i="2"></i><i data-i="3"></i><i data-i="4"></i><i data-i="5"></i>
+      </div>
+    </div>
+    <button class="arrow" id="nav-right">→</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============ Data model ============ */
+  var MISSIONS = [
+    {id:'m1', name:'Missão 1', label:'Rampa'},
+    {id:'m2', name:'Missão 2', label:'Entrega do Carrinho'},
+    {id:'m3', name:'Missão 3', label:'Triângulos'}
+  ];
+
+  var STORAGE_KEY = 'obby_data_v1';
+
+  var TESTS = [];
+  var generalNotes = [];
+  var roundSeq = 0;
+
+  /* ============ IndexedDB — cache local (seção 11 do espec) ============
+     Armazenamento principal estruturado (banco online, ex: PostgreSQL)
+     e sincronização entre contas/dispositivos dependem de um backend
+     real (API + servidor), que não existe neste protótipo estático —
+     por isso ficam marcados como pendentes na aba "Dados". O que É
+     possível fazer só no navegador é o cache local: aqui o OBBY usa
+     IndexedDB quando disponível (com localStorage como leitura/escrita
+     síncrona garantida no boot), espelhando cada saveState() também no
+     IndexedDB de forma assíncrona, sem bloquear a interface. */
+  var STORAGE_BACKEND = (typeof window !== 'undefined' && window.indexedDB) ? 'indexeddb' : 'localStorage';
+  var idbHandle = null;
+  if(STORAGE_BACKEND === 'indexeddb'){
+    try{
+      var idbReq = window.indexedDB.open('obby_db', 1);
+      idbReq.onupgradeneeded = function(e){
+        var db = e.target.result;
+        if(!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      };
+      idbReq.onsuccess = function(e){ idbHandle = e.target.result; idbMirrorSave(); };
+      idbReq.onerror = function(){ STORAGE_BACKEND = 'localStorage'; };
+    }catch(e){ STORAGE_BACKEND = 'localStorage'; }
+  }
+  function idbMirrorSave(){
+    if(!idbHandle) return;
+    try{
+      var tx = idbHandle.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put({ TESTS: TESTS, generalNotes: generalNotes, roundSeq: roundSeq }, STORAGE_KEY);
+    }catch(e){ /* cache best-effort — localStorage continua sendo a fonte confiável */ }
+  }
+
+  function nextRoundId(){ roundSeq += 1; return roundSeq; }
+
+  function makeRound(testId, results, opts){
+    opts = opts || {};
+    return {
+      id: nextRoundId(),
+      testId: testId,
+      results: results, // [bool|null, bool|null, bool|null]
+      invalidated: !!opts.invalidated,
+      note: opts.note || '',
+      tags: opts.tags || [],
+      type: opts.type || 'full',
+      focusedMission: opts.focusedMission || null,
+      correction: null
+    };
+  }
+
+  /* extrai #tags de um texto, sem remover as tags do texto original */
+  function extractTags(text){
+    var tags = [];
+    var re = /#([a-zA-Z0-9_ÀÁÂÃÉÊÍÓÔÕÚÜÇàáâãéêíóôõúüç]+)/g;
+    var m;
+    while((m = re.exec(text || ''))){
+      var tag = m[1].toLowerCase();
+      if(tags.indexOf(tag) === -1) tags.push(tag);
+    }
+    return tags;
+  }
+
+  /* ============ Persistência (localStorage) ============
+     Nada de dados pré-carregados: tudo começa vazio e só existe
+     o que o usuário efetivamente registrar. Cada mudança de estado
+     é salva imediatamente, e recarregada ao abrir a página. */
+  function saveState(){
+    try{
+      var data = { TESTS: TESTS, generalNotes: generalNotes, roundSeq: roundSeq };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }catch(e){
+      console.warn('OBBY: não foi possível salvar os dados', e);
+    }
+    idbMirrorSave(); // best-effort, assíncrono — não bloqueia a UI
+  }
+
+  function loadState(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return false;
+      var data = JSON.parse(raw);
+      if(!data || !Array.isArray(data.TESTS)) return false;
+      TESTS = data.TESTS;
+      generalNotes = Array.isArray(data.generalNotes) ? data.generalNotes : [];
+      roundSeq = typeof data.roundSeq === 'number' ? data.roundSeq : 0;
+      return true;
+    }catch(e){
+      console.warn('OBBY: não foi possível carregar os dados salvos', e);
+      return false;
+    }
+  }
+
+  var hadSavedData = loadState();
+
+  function wipeState(){
+    TESTS = [];
+    generalNotes = [];
+    roundSeq = 0;
+    saveState();
+    ACTION_LOG = [];
+  }
+
+  function getActiveTest(){ return TESTS.filter(function(t){return t.active;})[0]; }
+  function getTest(id){ return TESTS.filter(function(t){return t.id===id;})[0]; }
+  function allRounds(){ return TESTS.reduce(function(acc,t){return acc.concat(t.rounds);}, []); }
+
+  /* ============ Histórico de alterações / /voltar ============
+     Cada operação que muda dados empilha uma ação com uma função
+     de desfazer. /voltar desfaz a última alteração de dados
+     (não apenas a última rodada), sempre pedindo confirmação. */
+  var ACTION_LOG = [];
+  var ACTION_LOG_LIMIT = 300;
+
+  function pushAction(label, undoFn){
+    ACTION_LOG.push({ label: label, undo: undoFn });
+    if(ACTION_LOG.length > ACTION_LOG_LIMIT) ACTION_LOG.shift();
+  }
+
+  function undoLastAction(){
+    if(!ACTION_LOG.length) return null;
+    var action = ACTION_LOG.pop();
+    action.undo();
+    saveState();
+    return action;
+  }
+
+  function createNewTest(name){
+    TESTS.forEach(function(t){ t.active = false; });
+    var nextId = TESTS.length ? Math.max.apply(null, TESTS.map(function(t){return t.id;})) + 1 : 1;
+    var finalName = name || ('Teste ' + (nextId < 10 ? '0'+nextId : nextId));
+    var t = { id: nextId, name: finalName, rounds: [], active: true, tags: [] };
+    TESTS.push(t);
+    saveState();
+    pushAction('criar teste "' + t.name + '"', function(){
+      var idx = TESTS.indexOf(t);
+      if(idx !== -1) TESTS.splice(idx, 1);
+    });
+    return t;
+  }
+
+  /* ============ Stats helpers ============ */
+  function validRounds(rounds){ return rounds.filter(function(r){ return !r.invalidated; }); }
+
+  function missionPercent(rounds, idx){
+    var relevant = validRounds(rounds).filter(function(r){ return r.results[idx] !== null && r.results[idx] !== undefined; });
+    if(!relevant.length) return null;
+    var succ = relevant.filter(function(r){ return r.results[idx]; }).length;
+    return Math.round(succ / relevant.length * 100);
+  }
+
+  function overallPercent(rounds){
+    var vals = [];
+    validRounds(rounds).forEach(function(r){
+      r.results.forEach(function(v){ if(v !== null && v !== undefined) vals.push(v ? 1 : 0); });
+    });
+    if(!vals.length) return null;
+    return Math.round(vals.reduce(function(a,b){return a+b;},0) / vals.length * 100);
+  }
+
+  function testSnapshot(test){
+    return {
+      testId: test.id,
+      name: test.name,
+      overall: overallPercent(test.rounds),
+      m1: missionPercent(test.rounds, 0),
+      m2: missionPercent(test.rounds, 1),
+      m3: missionPercent(test.rounds, 2)
+    };
+  }
+
+  /* ============ View / routing state ============ */
+  var VIEWS = ['terminal','dashboard','evolucao','relatorios','dados','ajuda'];
+  var VIEW_LABELS = {terminal:'TERMINAL', dashboard:'DASHBOARD', evolucao:'EVOLUÇÃO', relatorios:'RELATÓRIOS', dados:'DADOS', ajuda:'AJUDA'};
+  var currentView = 0;
+
+  function setView(idx, opts){
+    opts = opts || {};
+    if(idx < 0) idx = 0;
+    if(idx > VIEWS.length-1) idx = VIEWS.length-1;
+    currentView = idx;
+    var name = VIEWS[idx];
+    var isTerminal = name === 'terminal';
+    document.getElementById('app').classList.toggle('terminal-expanded', isTerminal);
+    document.querySelectorAll('main .view').forEach(function(v){ v.classList.remove('active'); });
+    if(!isTerminal){
+      document.getElementById('view-'+name).classList.add('active');
+    }
+    document.querySelectorAll('#tabs button').forEach(function(b,i){ b.classList.toggle('active', i===idx); });
+    document.getElementById('path-seg').textContent = '/' + name;
+    document.getElementById('bottomnav-text').textContent = VIEW_LABELS[name];
+    document.querySelectorAll('#bottomnav-dots i').forEach(function(d,i){ d.classList.toggle('on', i===idx); });
+    if(name === 'dashboard') renderDashboard();
+    if(name === 'evolucao') renderEvolucao();
+    if(name === 'relatorios') renderRelatorios();
+    if(name === 'dados') renderDados();
+    if(name === 'ajuda') renderAjuda();
+    if(isTerminal && !opts.noFocus) input.focus();
+  }
+
+  document.querySelectorAll('#tabs button').forEach(function(btn, i){
+    btn.addEventListener('click', function(){ setView(i); });
+  });
+  document.getElementById('nav-left').addEventListener('click', function(){ setView(currentView-1); });
+  document.getElementById('nav-right').addEventListener('click', function(){ setView(currentView+1); });
+
+  document.addEventListener('keydown', function(e){
+    var input = document.getElementById('term-input');
+    var typing = document.activeElement === input && input.value.length > 0;
+    if((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing){
+      e.preventDefault();
+      setView(currentView + (e.key === 'ArrowRight' ? 1 : -1));
+    }
+  });
+
+  /* ============ Terminal ============ */
+
+  var log = document.getElementById('term-log');
+  var input = document.getElementById('term-input');
+  var history = [];
+  var histPos = -1;
+  var pendingMini = null; // {count, missionIdx|null, done, collected:[]}
+
+  function printCmd(text){
+    var d = document.createElement('div');
+    d.className = 'term-line cmd';
+    d.textContent = text;
+    log.appendChild(d);
+  }
+  function printLine(text, cls){
+    var d = document.createElement('div');
+    d.className = 'term-line ' + (cls||'out');
+    d.textContent = text;
+    log.appendChild(d);
+  }
+  function printBlock(html){
+    var d = document.createElement('div');
+    d.className = 'term-block';
+    d.innerHTML = html;
+    log.appendChild(d);
+  }
+  function scrollLog(){ log.scrollTop = log.scrollHeight; }
+
+  function clearTerminal(){
+    log.innerHTML = '';
+    var t = getActiveTest();
+    printLine('Terminal limpo.', 'dim');
+    if(t) printLine('Teste ativo: ' + t.name, 'dim');
+  }
+
+  function missionResultsHtml(results){
+    return results.map(function(v, i){
+      if(v === null || v === undefined) return '';
+      var cls = v ? 'ok' : 'no';
+      return '<div class="res-row"><span class="m">'+MISSIONS[i].name+'</span><span class="v '+cls+'">'+(v?'SUCESSO':'FALHA')+'</span></div>';
+    }).join('');
+  }
+
+  function registerRound(results, invalidated, note, type, focusedMission){
+    var t = getActiveTest();
+    if(!t) return null;
+    var tags = extractTags(note);
+    var r = makeRound(t.id, results, {invalidated:invalidated, note:note||'', tags:tags, type:type||'full', focusedMission:focusedMission||null});
+    t.rounds.push(r);
+    saveState();
+    pushAction('registrar rodada #' + r.id + ' (' + t.name + ')', function(){
+      var idx = t.rounds.indexOf(r);
+      if(idx !== -1) t.rounds.splice(idx, 1);
+    });
+    return r;
+  }
+
+  /* remove uma rodada pelo id, em qualquer teste. Retorna {test, round, idx} ou null. */
+  function findRoundLocation(id){
+    var result = null;
+    TESTS.forEach(function(t){
+      var idx = t.rounds.findIndex(function(r){ return r.id === id; });
+      if(idx !== -1) result = { test: t, round: t.rounds[idx], idx: idx };
+    });
+    return result;
+  }
+
+  function removeRoundById(id){
+    var loc = findRoundLocation(id);
+    if(!loc) return null;
+    loc.test.rounds.splice(loc.idx, 1);
+    saveState();
+    pushAction('remover rodada #' + id + ' (' + loc.test.name + ')', function(){
+      loc.test.rounds.splice(loc.idx, 0, loc.round);
+    });
+    return loc;
+  }
+
+  function removeTestById(id){
+    var idx = TESTS.findIndex(function(t){ return t.id === id; });
+    if(idx === -1) return null;
+    var t = TESTS[idx];
+    TESTS.splice(idx, 1);
+    saveState();
+    pushAction('remover teste "' + t.name + '"', function(){
+      TESTS.splice(idx, 0, t);
+    });
+    return t;
+  }
+
+  function tokenizeResultString(str){
+    // returns {results:[bool,bool,bool] or fewer, invalidated}
+    // aceita tanto "S N S" (com espaços) quanto "SNS" (colado),
+    // e qualquer mistura das duas formas — lê caractere a caractere.
+    var invalidated = false;
+    var results = [];
+    var chars = (str || '').trim().split('');
+    chars.forEach(function(ch){
+      var c = ch.toUpperCase();
+      if(c === 'S') results.push(true);
+      else if(c === 'N') results.push(false);
+      else if(c === '*') invalidated = true;
+      // espaços e demais caracteres são ignorados aqui
+    });
+    return {results: results, invalidated: invalidated};
+  }
+
+  function isResultLine(str){
+    return /^[SsNn\s\*]+$/.test(str.trim()) && /[SsNn]/.test(str);
+  }
+
+  /* ============ Confirmação genérica (y/N) ============
+     Usada por /voltar e /remover. Enquanto pendingConfirm estiver
+     ativo, a próxima linha digitada é interpretada como resposta,
+     e nada é alterado se a resposta for N. */
+  var pendingConfirm = null;
+
+  function askConfirm(message, onYes, onNo){
+    pendingConfirm = { onYes: onYes, onNo: onNo || null };
+    printLine(message + ' (y/N)', 'warn');
+  }
+
+  function handleConfirmInput(cmd){
+    var v = cmd.trim().toLowerCase();
+    var yes = (v === 'y' || v === 's' || v === 'sim' || v === 'yes');
+    var action = pendingConfirm;
+    pendingConfirm = null;
+    if(yes){
+      action.onYes();
+    } else {
+      printLine('Nada foi alterado.', 'dim');
+      if(action.onNo) action.onNo();
+    }
+  }
+
+  function handleCommand(raw){
+    var cmd = raw;
+    printCmd(cmd);
+
+    // Se há uma confirmação pendente (/voltar, /remover), esta linha é a resposta
+    if(pendingConfirm){
+      handleConfirmInput(cmd);
+      scrollLog();
+      return;
+    }
+
+    // If a mini-test is in progress, treat this as one round of it
+    if(pendingMini){
+      handleMiniRound(cmd);
+      return;
+    }
+
+    var trimmed = cmd.trim();
+    if(trimmed === ''){ return; }
+
+    // cls / limpar — limpa o terminal
+    if(/^(cls|clear|limpar)$/i.test(trimmed)){
+      clearTerminal();
+      return;
+    }
+
+    // cd navigation
+    var cdMatch = trimmed.match(/^cd\s+(\S+)/i);
+    if(cdMatch){
+      var dest = cdMatch[1].toLowerCase();
+      var map = {dashboard:'dashboard', dash:'dashboard', evolucao:'evolucao', evo:'evolucao', relatorios:'relatorios', rel:'relatorios', terminal:'terminal', term:'terminal', dados:'dados', data:'dados', ajuda:'ajuda', help:'ajuda'};
+      if(map[dest]){
+        printLine('Abrindo ' + VIEW_LABELS[map[dest]].toLowerCase() + '…', 'dim');
+        var idx = VIEWS.indexOf(map[dest]);
+        setTimeout(function(){ setView(idx, {noFocus:true}); input.focus(); }, 120);
+      } else {
+        printLine('Destino desconhecido: ' + dest, 'err');
+      }
+      scrollLog();
+      return;
+    }
+
+    // system commands
+    if(trimmed.charAt(0) === '/'){
+      handleSystemCommand(trimmed);
+      scrollLog();
+      return;
+    }
+
+    // correction
+    if(trimmed.charAt(0) === '!'){
+      handleCorrection(trimmed);
+      scrollLog();
+      return;
+    }
+
+    // mini-test start
+    var miniMatch = trimmed.match(/^@(\d+)(?:\s+M(\d))?/i);
+    if(miniMatch){
+      startMiniTest(parseInt(miniMatch[1],10), miniMatch[2] ? parseInt(miniMatch[2],10)-1 : null);
+      scrollLog();
+      return;
+    }
+
+    // general observation
+    if(trimmed.charAt(0) === '#'){
+      var text = trimmed.slice(1).trim();
+      var atest = getActiveTest();
+      if(!atest){
+        printLine('Nenhum teste ativo. Use "/teste novo" para criar um teste antes.', 'err');
+        scrollLog();
+        return;
+      }
+      var noteObj = {testId: atest.id, text: text, tags: extractTags(text)};
+      generalNotes.push(noteObj);
+      saveState();
+      pushAction('adicionar observação geral (' + atest.name + ')', function(){
+        var idx = generalNotes.indexOf(noteObj);
+        if(idx !== -1) generalNotes.splice(idx, 1);
+      });
+      printLine('Observação registrada ✓', 'ok');
+      if(noteObj.tags.length) printLine('tags: ' + noteObj.tags.map(function(t){return '#'+t;}).join(' '), 'dim');
+      scrollLog();
+      return;
+    }
+
+    // round entry, optionally with trailing # note
+    var noteSplit = trimmed.split('#');
+    var seqPart = noteSplit[0].trim();
+    var notePart = noteSplit.length > 1 ? noteSplit.slice(1).join('#').trim() : '';
+
+    if(isResultLine(seqPart)){
+      if(!getActiveTest()){
+        printLine('Nenhum teste ativo. Use "/teste novo" para criar um teste antes de registrar rodadas.', 'err');
+        scrollLog();
+        return;
+      }
+      var parsed = tokenizeResultString(seqPart);
+      if(!parsed.results.length){
+        printLine('Não entendi esse comando. Digite /ajuda para ver a sintaxe.', 'err');
+        scrollLog();
+        return;
+      }
+      while(parsed.results.length < MISSIONS.length) parsed.results.push(null);
+      var round = registerRound(parsed.results, parsed.invalidated, notePart);
+      printLine('Rodada registrada ✓', 'ok');
+      printBlock('<div style="margin-top:4px;">' + missionResultsHtml(round.results) + '</div>');
+      if(parsed.invalidated) printLine('⚠ rodada marcada como invalidada — não entra nas estatísticas', 'warn');
+      if(notePart) printLine('# ' + notePart, 'dim');
+      scrollLog();
+      return;
+    }
+
+    printLine('Não entendi esse comando. Digite /ajuda para ver a sintaxe.', 'err');
+    scrollLog();
+  }
+
+  function startMiniTest(count, missionIdx){
+    if(!getActiveTest()){ printLine('Nenhum teste ativo. Use "/teste novo" para criar um teste antes.', 'err'); return; }
+    if(count < 1 || count > 50){ printLine('Quantidade inválida para mini-teste.', 'err'); return; }
+    pendingMini = {count:count, missionIdx: missionIdx, done:0, collected:[]};
+    var label = missionIdx !== null ? (' focado em ' + MISSIONS[missionIdx].name) : '';
+    printLine('Mini-teste iniciado: ' + count + ' rodadas' + label + '.', 'ok');
+    printLine('Digite os resultados um de cada vez (ESC cancela).', 'dim');
+  }
+
+  function handleMiniRound(cmd){
+    var trimmed = cmd.trim();
+    if(!isResultLine(trimmed) && pendingMini.missionIdx === null){
+      printLine('Esperando um resultado válido (ex: S N S).', 'err');
+      return;
+    }
+    var round;
+    if(pendingMini.missionIdx !== null){
+      var single = trimmed.toUpperCase().replace(/\*/g,'').trim();
+      if(single !== 'S' && single !== 'N'){ printLine('Esperando S ou N.', 'err'); return; }
+      var res = [null,null,null];
+      res[pendingMini.missionIdx] = (single === 'S');
+      round = registerRound(res, false, '', 'focused', pendingMini.missionIdx);
+    } else {
+      var parsed = tokenizeResultString(trimmed);
+      while(parsed.results.length < MISSIONS.length) parsed.results.push(null);
+      round = registerRound(parsed.results, parsed.invalidated, '');
+    }
+    pendingMini.done += 1;
+    pendingMini.collected.push(round);
+    printLine('  → rodada ' + pendingMini.done + '/' + pendingMini.count + ' ok', 'dim');
+
+    if(pendingMini.done >= pendingMini.count){
+      finishMiniTest();
+    }
+  }
+
+  function finishMiniTest(){
+    var rounds = pendingMini.collected;
+    printLine('Mini-teste concluído ✓', 'ok');
+    if(pendingMini.missionIdx !== null){
+      var idx = pendingMini.missionIdx;
+      var pct = missionPercent(rounds, idx);
+      printLine(MISSIONS[idx].name + ': ' + (pct===null?'—':pct+'%') + ' de sucesso nesta série', 'out');
+    } else {
+      MISSIONS.forEach(function(m, i){
+        var pct = missionPercent(rounds, i);
+        printLine(m.name + ': ' + (pct===null?'—':pct+'%'), 'out');
+      });
+    }
+    pendingMini = null;
+  }
+
+  function handleSystemCommand(trimmed){
+    var body = trimmed.slice(1).trim(); // mantém maiúsculas/minúsculas originais
+    var firstSpace = body.search(/\s/);
+    var cmd = (firstSpace === -1 ? body : body.slice(0, firstSpace)).toLowerCase();
+    var rest = firstSpace === -1 ? '' : body.slice(firstSpace).trim();
+
+    if(cmd === 'ajuda' || cmd === 'help'){
+      printLine('Abrindo a documentação em uma aba separada…', 'dim');
+      var ajIdx = VIEWS.indexOf('ajuda');
+      setTimeout(function(){ setView(ajIdx, {noFocus:true}); }, 120);
+    } else if(cmd === 'teste'){
+      if(rest){
+        var subSpace = rest.search(/\s/);
+        var sub = (subSpace === -1 ? rest : rest.slice(0, subSpace)).toLowerCase();
+        if(sub === 'novo'){
+          var name = subSpace === -1 ? '' : rest.slice(subSpace).trim();
+          var nt = createNewTest(name);
+          printLine('Novo teste criado: ' + nt.name, 'ok');
+          printLine('Teste ativo agora: ' + nt.name, 'dim');
+          return;
+        }
+        printLine('Subcomando desconhecido: /teste ' + sub, 'err');
+        return;
+      }
+      if(!TESTS.length){
+        printLine('Nenhum teste criado ainda. Digite "/teste novo" para começar.', 'warn');
+        return;
+      }
+      TESTS.forEach(function(t){
+        var pct = overallPercent(t.rounds);
+        printLine((t.active?'▸ ':'  ') + t.name + '  —  ' + t.rounds.length + ' rodadas  —  ' + (pct===null?'—':pct+'%'), t.active?'ok':'out');
+      });
+    } else if(cmd === 'missao'){
+      var t = getActiveTest();
+      if(!t){ printLine('Nenhum teste ativo. Use "/teste novo" para criar um teste.', 'err'); return; }
+      MISSIONS.forEach(function(m, i){
+        var pct = missionPercent(t.rounds, i);
+        printLine(m.name + ' (' + m.label + ')  —  ' + (pct===null?'sem dados':pct+'% de sucesso'), 'out');
+      });
+    } else if(cmd === 'status'){
+      var t2 = getActiveTest();
+      if(!t2){ printLine('Nenhum teste ativo. Use "/teste novo" para criar um teste.', 'err'); return; }
+      var valid = validRounds(t2.rounds).length;
+      var invalid = t2.rounds.length - valid;
+      printLine(t2.name, 'ok');
+      printLine(t2.rounds.length + ' rodadas registradas', 'out');
+      printLine(valid + ' rodadas válidas', 'out');
+      printLine(invalid + ' rodada' + (invalid===1?'':'s') + ' invalidada' + (invalid===1?'':'s'), invalid?'warn':'out');
+      var op = overallPercent(t2.rounds);
+      printLine('Desempenho geral: ' + (op===null?'—':op+'%'), 'out');
+    } else if(cmd === 'historico'){
+      var at = getActiveTest();
+      if(!at){ printLine('Nenhum teste ativo. Use "/teste novo" para criar um teste.', 'err'); return; }
+      var rs = at.rounds.slice(-8);
+      if(!rs.length){ printLine('Nenhuma rodada registrada neste teste ainda.', 'dim'); return; }
+      rs.forEach(function(r){
+        printLine('#' + r.id + '  ' + roundSeqLabel(r) + (r.invalidated?'  (invalidada)':'') + (r.correction?'  (corrigida)':''), r.invalidated?'dim':'out');
+      });
+    } else if(cmd === 'evolucao'){
+      if(!TESTS.length){ printLine('Nenhum teste registrado ainda.', 'warn'); return; }
+      TESTS.forEach(function(t){
+        var s = testSnapshot(t);
+        printLine(t.name + ':  ' + (s.overall===null?'—':s.overall+'%'), 'out');
+      });
+      printLine('(cd evolucao para o gráfico completo)', 'dim');
+    } else if(cmd === 'relatorio'){
+      var all = allRounds();
+      var valid2 = validRounds(all);
+      printLine('Testes: ' + TESTS.length + '   Rodadas: ' + all.length + '   Válidas: ' + valid2.length, 'out');
+      printLine('(cd relatorios para o relatório completo)', 'dim');
+    } else if(cmd === 'resetar'){
+      if(rest.toLowerCase() === 'confirmar'){
+        wipeState();
+        clearTerminal();
+        printLine('Todos os dados foram apagados.', 'warn');
+        refreshAllViews();
+      } else {
+        printLine('⚠ Isso apaga TODOS os testes, rodadas e observações salvas.', 'warn');
+        printLine('Digite "/resetar confirmar" para confirmar.', 'dim');
+      }
+    } else if(cmd === 'voltar' || cmd === 'reload'){
+      if(!ACTION_LOG.length){ printLine('Nada para desfazer.', 'dim'); return; }
+      var lastAction = ACTION_LOG[ACTION_LOG.length - 1];
+      askConfirm('A última ação foi: ' + lastAction.label + '. Deseja desfazer?', function(){
+        var undone = undoLastAction();
+        printLine('Desfeito: ' + undone.label, 'ok');
+        refreshAllViews();
+      });
+    } else if(cmd === 'remover'){
+      var rmSpace = rest.search(/\s/);
+      var rmSub = (rmSpace === -1 ? rest : rest.slice(0, rmSpace)).toLowerCase();
+      var rmArg = rmSpace === -1 ? '' : rest.slice(rmSpace).trim();
+      if(rmSub === 'rodada'){
+        var rid = parseInt(rmArg, 10);
+        if(isNaN(rid)){ printLine('Uso: /remover rodada <id>', 'err'); return; }
+        var loc = findRoundLocation(rid);
+        if(!loc){ printLine('Rodada ' + rid + ' não encontrada.', 'err'); return; }
+        askConfirm('Remover a rodada #' + rid + ' (' + roundSeqLabel(loc.round) + ') do teste "' + loc.test.name + '"?', function(){
+          removeRoundById(rid);
+          printLine('Rodada #' + rid + ' removida. Use /voltar para desfazer.', 'ok');
+          refreshAllViews();
+        });
+      } else if(rmSub === 'teste'){
+        var target = rmArg ? getTest(parseInt(rmArg,10)) : getActiveTest();
+        if(!target){ printLine('Teste não encontrado.', 'err'); return; }
+        askConfirm('Remover o teste "' + target.name + '" e suas ' + target.rounds.length + ' rodadas?', function(){
+          removeTestById(target.id);
+          printLine('Teste "' + target.name + '" removido. Use /voltar para desfazer.', 'ok');
+          refreshAllViews();
+        });
+      } else {
+        printLine('Uso: /remover rodada <id>  ou  /remover teste [id]', 'err');
+      }
+    } else if(cmd === 'selecionar' || cmd === 'sel'){
+      if(!rest){
+        if(!TESTS.length){ printLine('Nenhum teste criado ainda.', 'warn'); return; }
+        TESTS.forEach(function(t){
+          printLine((t.active?'▸ ':'  ') + t.id + '. ' + t.name + '  —  ' + t.rounds.length + ' rodadas', t.active?'ok':'out');
+        });
+        printLine('Use /selecionar <id>, /selecionar M2 ou /selecionar #tag', 'dim');
+        return;
+      }
+      if(rest.charAt(0) === '#'){
+        var tagQuery = rest.split(/\s+/).map(function(p){ return p.replace(/^#/,'').toLowerCase(); }).filter(Boolean);
+        var roundMatches = allRounds().filter(function(r){
+          return tagQuery.every(function(tg){ return (r.tags||[]).indexOf(tg) !== -1; });
+        });
+        var noteMatches = generalNotes.filter(function(n){
+          return tagQuery.every(function(tg){ return (n.tags||[]).indexOf(tg) !== -1; });
+        });
+        if(!roundMatches.length && !noteMatches.length){ printLine('Nada encontrado com ' + rest, 'dim'); return; }
+        roundMatches.forEach(function(r){
+          printLine('#' + r.id + '  ' + roundSeqLabel(r) + (r.note ? '  — ' + r.note : ''), 'out');
+        });
+        noteMatches.forEach(function(n){
+          printLine('nota (teste ' + n.testId + '): ' + n.text, 'dim');
+        });
+        return;
+      }
+      var mMatch = rest.match(/^M(\d)$/i);
+      if(mMatch){
+        var midx = parseInt(mMatch[1],10) - 1;
+        var atest = getActiveTest();
+        if(!atest){ printLine('Nenhum teste ativo.', 'err'); return; }
+        if(!MISSIONS[midx]){ printLine('Missão inválida.', 'err'); return; }
+        var pct = missionPercent(atest.rounds, midx);
+        printLine(MISSIONS[midx].name + ' (' + MISSIONS[midx].label + ')  —  ' + (pct===null?'sem dados':pct+'%'), 'ok');
+        var relRounds = atest.rounds.filter(function(r){ return r.results[midx] !== null && r.results[midx] !== undefined; });
+        relRounds.slice(-10).forEach(function(r){
+          printLine('  #' + r.id + '  ' + (r.results[midx] ? 'S' : 'N') + (r.note ? '  — ' + r.note : ''), 'dim');
+        });
+        return;
+      }
+      var tid = parseInt(rest, 10);
+      var target2 = !isNaN(tid) ? getTest(tid) : TESTS.filter(function(t){ return t.name.toLowerCase() === rest.toLowerCase(); })[0];
+      if(!target2){ printLine('Teste não encontrado: ' + rest, 'err'); return; }
+      TESTS.forEach(function(t){ t.active = (t.id === target2.id); });
+      saveState();
+      printLine('Teste selecionado: ' + target2.name, 'ok');
+    } else if(cmd === 'sincronizar'){
+      var sArgs = rest.split(/\s+/).filter(Boolean);
+      if(sArgs.length < 2){ printLine('Uso: /sincronizar <id1> <id2> [nome do novo teste]', 'err'); return; }
+      var id1 = parseInt(sArgs[0],10), id2 = parseInt(sArgs[1],10);
+      var t1 = getTest(id1), t2 = getTest(id2);
+      if(!t1 || !t2){ printLine('Um ou ambos os testes não foram encontrados.', 'err'); return; }
+      var newName = sArgs.length > 2 ? sArgs.slice(2).join(' ') : (t1.name + ' + ' + t2.name);
+      askConfirm('Sincronizar "' + t1.name + '" com "' + t2.name + '" em um novo teste "' + newName + '"? Os testes originais são preservados.', function(){
+        var combined = createNewTest(newName);
+        var copiedRounds = t1.rounds.concat(t2.rounds).map(function(r){
+          return makeRound(combined.id, r.results.slice(), {invalidated:r.invalidated, note:r.note, tags:(r.tags||[]).slice(), type:r.type, focusedMission:r.focusedMission});
+        });
+        combined.rounds = copiedRounds;
+        saveState();
+        printLine('Testes sincronizados em "' + combined.name + '" (' + combined.rounds.length + ' rodadas). M1 com M1, M2 com M2 etc. — dados originais preservados em ' + t1.name + ' e ' + t2.name + '.', 'ok');
+        refreshAllViews();
+      });
+    } else if(cmd === 'csv'){
+      var csvSpace = rest.search(/\s/);
+      var csvSub = (csvSpace === -1 ? rest : rest.slice(0, csvSpace)).toLowerCase();
+      var csvArg = csvSpace === -1 ? '' : rest.slice(csvSpace).trim();
+      if(csvSub === 'exportar'){
+        var expTarget = csvArg ? getTest(parseInt(csvArg,10)) : getActiveTest();
+        if(!expTarget){ printLine('Teste não encontrado.', 'err'); return; }
+        exportCsv(expTarget);
+        printLine('Exportando "' + expTarget.name + '.csv"…', 'ok');
+      } else if(csvSub === 'importar'){
+        printLine('Selecione um arquivo .csv…', 'dim');
+        document.getElementById('csv-file-input').click();
+      } else {
+        printLine('Uso: /csv exportar [id]  ou  /csv importar', 'err');
+      }
+    } else {
+      printLine('Comando desconhecido: /' + cmd, 'err');
+    }
+  }
+
+  function roundSeqLabel(r){
+    return r.results.map(function(v){ return v===null||v===undefined ? '·' : (v?'S':'N'); }).join(' ');
+  }
+
+  function handleCorrection(trimmed){
+    var m = trimmed.match(/^!\s*(\d+)\s*(.*)$/);
+    if(!m){ printLine('Uso: !12  ou  !12 S S S # motivo', 'err'); return; }
+    var id = parseInt(m[1],10);
+    var rest = m[2].trim();
+    var round = null;
+    allRounds().forEach(function(r){ if(r.id === id) round = r; });
+    if(!round){ printLine('Rodada ' + id + ' não encontrada.', 'err'); return; }
+
+    if(!rest){
+      printLine('Rodada ' + id, 'ok');
+      if(round.correction){
+        printLine('Original: ' + roundSeqLabel({results: round.correction.original}), 'out');
+        printLine('Corrigido: ' + roundSeqLabel({results: round.correction.correctedTo}), 'out');
+        printLine('Motivo: ' + round.correction.reason, 'dim');
+      } else {
+        printLine('Atual: ' + roundSeqLabel(round), 'out');
+      }
+      return;
+    }
+
+    var parts = rest.split('#');
+    var seqPart = parts[0].trim();
+    var reason = parts.length > 1 ? parts.slice(1).join('#').trim() : 'não informado';
+    var parsed = tokenizeResultString(seqPart);
+    if(!parsed.results.length){ printLine('Sequência de correção inválida.', 'err'); return; }
+    while(parsed.results.length < MISSIONS.length) parsed.results.push(null);
+
+    var original = round.results.slice();
+    var prevCorrection = round.correction;
+    round.correction = { original: original, correctedTo: parsed.results, reason: reason };
+    round.results = parsed.results;
+    saveState();
+    pushAction('corrigir rodada #' + id, function(){
+      round.results = original;
+      round.correction = prevCorrection;
+    });
+
+    printLine('Rodada ' + id, 'ok');
+    printLine('Original: ' + roundSeqLabel({results: original}), 'dim');
+    printLine('Novo resultado: ' + roundSeqLabel({results: parsed.results}), 'out');
+    printLine('Motivo: ' + reason, 'dim');
+  }
+
+  /* ============ CSV — importação / exportação ============
+     CSV é formato de importação/exportação, não armazenamento
+     principal (o armazenamento principal continua sendo o estado
+     salvo via saveState/loadState). */
+  function exportCsv(test){
+    var header = ['id','invalidada'].concat(MISSIONS.map(function(m){return m.id;})).concat(['nota','tags']);
+    var rows = [header.join(',')];
+    test.rounds.forEach(function(r){
+      var vals = r.results.map(function(v){ return v===null||v===undefined ? '' : (v?'S':'N'); });
+      var noteEsc = '"' + (r.note||'').replace(/"/g,'""') + '"';
+      var tagsEsc = '"' + (r.tags||[]).join('|') + '"';
+      rows.push([r.id, r.invalidated?1:0].concat(vals).concat([noteEsc, tagsEsc]).join(','));
+    });
+    var blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = (test.name || 'teste').replace(/\s+/g,'_') + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function parseCsvLine(line){
+    var out = [], cur = '', inQuotes = false;
+    for(var i=0;i<line.length;i++){
+      var c = line[i];
+      if(inQuotes){
+        if(c === '"'){
+          if(line[i+1] === '"'){ cur += '"'; i++; } else { inQuotes = false; }
+        } else { cur += c; }
+      } else {
+        if(c === '"'){ inQuotes = true; }
+        else if(c === ','){ out.push(cur); cur = ''; }
+        else { cur += c; }
+      }
+    }
+    out.push(cur);
+    return out;
+  }
+
+  function importCsvText(text, suggestedName){
+    var lines = text.split(/\r?\n/).filter(function(l){ return l.trim() !== ''; });
+    if(lines.length < 2){ printLine('Arquivo CSV vazio ou inválido.', 'err'); return; }
+    var header = parseCsvLine(lines[0]).map(function(h){ return h.trim().toLowerCase(); });
+    var missionCols = MISSIONS.map(function(m){ return header.indexOf(m.id); });
+    var invalidCol = header.indexOf('invalidada');
+    var noteCol = header.indexOf('nota');
+    var tagsCol = header.indexOf('tags');
+    var t = createNewTest(suggestedName);
+    var imported = [];
+    for(var i=1;i<lines.length;i++){
+      var cols = parseCsvLine(lines[i]);
+      var results = missionCols.map(function(ci){
+        if(ci === -1) return null;
+        var v = (cols[ci]||'').trim().toUpperCase();
+        if(v === 'S') return true;
+        if(v === 'N') return false;
+        return null;
+      });
+      var invalidated = invalidCol !== -1 && /^(1|true)$/i.test((cols[invalidCol]||'').trim());
+      var note = noteCol !== -1 ? cols[noteCol] : '';
+      var tags = (tagsCol !== -1 && cols[tagsCol]) ? cols[tagsCol].split('|').filter(Boolean) : extractTags(note);
+      imported.push(makeRound(t.id, results, {invalidated:invalidated, note:note, tags:tags}));
+    }
+    t.rounds = imported;
+    saveState();
+    printLine('Importação concluída: ' + imported.length + ' rodadas em "' + t.name + '". Use /voltar para desfazer.', 'ok');
+    refreshAllViews();
+  }
+
+  document.getElementById('csv-file-input').addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      var suggested = file.name.replace(/\.csv$/i,'').replace(/_/g,' ');
+      importCsvText(String(reader.result), suggested);
+      scrollLog();
+    };
+    reader.onerror = function(){ printLine('Não foi possível ler o arquivo.', 'err'); scrollLog(); };
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  });
+
+  /* ============ Autocompletamento ============ */
+  var ghost = document.getElementById('term-ghost');
+  var AUTOCOMPLETE_CMDS = [
+    '/ajuda', '/help', '/teste', '/teste novo', '/missao', '/status', '/historico',
+    '/evolucao', '/relatorio', '/resetar confirmar',
+    '/voltar', '/remover rodada ', '/remover teste',
+    '/selecionar', '/sincronizar', '/csv exportar', '/csv importar',
+    'cd dashboard', 'cd evolucao', 'cd relatorios', 'cd dados', 'cd ajuda', 'cd terminal',
+    'cls'
+  ];
+  var currentSuggestion = null;
+
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function computeSuggestion(val){
+    if(!val) return null;
+    var lower = val.toLowerCase();
+    var found = null;
+    for(var i=0;i<AUTOCOMPLETE_CMDS.length;i++){
+      var c = AUTOCOMPLETE_CMDS[i];
+      if(c.length > val.length && c.toLowerCase().indexOf(lower) === 0){ found = c; break; }
+    }
+    return found;
+  }
+
+  function updateGhost(){
+    // não sugere no meio de um mini-teste (entrada é sempre S/N ali)
+    var val = input.value;
+    if(pendingMini){ currentSuggestion = null; ghost.innerHTML = ''; return; }
+    var sug = computeSuggestion(val);
+    currentSuggestion = sug;
+    if(!sug){ ghost.innerHTML = ''; return; }
+    ghost.innerHTML = '<span class="typed">' + escapeHtml(val) + '</span>' +
+                       '<span class="rest">' + escapeHtml(sug.slice(val.length)) + '</span>';
+  }
+
+  function acceptSuggestion(){
+    if(!currentSuggestion) return false;
+    input.value = currentSuggestion;
+    updateGhost();
+    setTimeout(function(){ input.setSelectionRange(input.value.length, input.value.length); }, 0);
+    return true;
+  }
+
+  input.addEventListener('input', updateGhost);
+
+  function submitInput(){
+    var val = input.value;
+    if(val.trim() === '' && !pendingMini && !pendingConfirm) return;
+    history.push(val);
+    histPos = history.length;
+    input.value = '';
+    updateGhost();
+    handleCommand(val);
+    scrollLog();
+    input.focus();
+  }
+
+  document.getElementById('term-enter-btn').addEventListener('click', submitInput);
+
+  input.addEventListener('keydown', function(e){
+    if(e.key === 'Tab'){
+      if(acceptSuggestion()) e.preventDefault();
+      return;
+    }
+    if(e.key === 'ArrowRight' && currentSuggestion && input.selectionStart === input.value.length){
+      e.preventDefault();
+      acceptSuggestion();
+      return;
+    }
+    if(e.key === 'Enter'){
+      submitInput();
+    } else if(e.key === 'ArrowUp'){
+      if(history.length){
+        e.preventDefault();
+        histPos = Math.max(0, histPos - 1);
+        input.value = history[histPos] || '';
+        updateGhost();
+        setTimeout(function(){ input.setSelectionRange(input.value.length, input.value.length); },0);
+      }
+    } else if(e.key === 'ArrowDown'){
+      if(history.length){
+        e.preventDefault();
+        histPos = Math.min(history.length, histPos + 1);
+        input.value = history[histPos] || '';
+        updateGhost();
+      }
+    } else if(e.key === 'Escape'){
+      if(pendingMini){
+        printLine('Mini-teste cancelado.', 'warn');
+        pendingMini = null;
+      }
+      if(pendingConfirm){
+        printLine('Nada foi alterado.', 'dim');
+        pendingConfirm = null;
+      }
+      input.value = '';
+      updateGhost();
+    }
+  });
+
+  /* ============ Redimensionar o terminal (arrastar) ============ */
+  (function setupResize(){
+    var handle = document.getElementById('term-resize');
+    var dock = document.getElementById('terminal-dock');
+    var dragging = false, startY = 0, startH = 0;
+    handle.addEventListener('pointerdown', function(e){
+      if(document.getElementById('app').classList.contains('terminal-expanded')) return;
+      dragging = true;
+      startY = e.clientY;
+      startH = dock.getBoundingClientRect().height;
+      handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener('pointermove', function(e){
+      if(!dragging) return;
+      var delta = startY - e.clientY;
+      var newH = Math.min(Math.max(startH + delta, 120), Math.round(window.innerHeight * 0.8));
+      dock.style.height = newH + 'px';
+    });
+    function endDrag(){ dragging = false; }
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  })();
+
+  document.getElementById('term-scroll').addEventListener('click', function(e){
+    if(e.target === log || e.target.closest('#term-log')) input.focus();
+  });
+
+  function bootTerminal(){
+    printLine('OBBY — Robot Test System', 'ok');
+    printLine('Terminal pronto. Digite /ajuda para ver os comandos.', 'dim');
+    var t = getActiveTest();
+    if(t){
+      printLine('Teste ativo: ' + t.name, 'dim');
+    } else {
+      printLine('Nenhum teste criado ainda. Digite "/teste novo" para começar.', 'warn');
+    }
+    printLine('', 'dim');
+  }
+
+  function refreshAllViews(){
+    renderDashboard(); renderEvolucao(); renderRelatorios();
+    if(VIEWS[currentView] === 'dados') renderDados();
+  }
+
+  /* ============ Dashboard ============ */
+  function renderDashboard(){
+    var t = getActiveTest();
+    if(!t){
+      document.getElementById('dash-testname').textContent = 'nenhum teste ativo';
+      document.getElementById('mission-cards').innerHTML = '';
+      document.getElementById('attn-list').innerHTML =
+        '<div class="attn-item"><span class="ic">i</span><span>Nenhum teste criado ainda. Use <b>/teste novo</b> no terminal para começar a registrar rodadas.</span></div>';
+      document.getElementById('last-rounds').innerHTML = '';
+      return;
+    }
+    document.getElementById('dash-testname').textContent = t.name;
+
+    var cardsEl = document.getElementById('mission-cards');
+    cardsEl.innerHTML = '';
+    MISSIONS.forEach(function(m, i){
+      var pct = missionPercent(t.rounds, i);
+      var cls = pct===null ? '' : pct < 60 ? 'low' : pct < 85 ? 'mid' : 'high';
+      var card = document.createElement('div');
+      card.className = 'mission-card ' + cls;
+      card.innerHTML =
+        '<div class="mname">' + m.name + '</div>' +
+        '<div class="mlabel">' + m.label + '</div>' +
+        '<div class="mpct">' + (pct===null?'—':pct+'%') + '</div>' +
+        '<div class="mbar"><i style="width:' + (pct||0) + '%"></i></div>';
+      cardsEl.appendChild(card);
+    });
+
+    // attention points
+    var attnEl = document.getElementById('attn-list');
+    attnEl.innerHTML = '';
+    var prevTest = getTest(t.id - 1);
+    var items = [];
+    MISSIONS.forEach(function(m, i){
+      var pct = missionPercent(t.rounds, i);
+      if(pct === null) return;
+      if(pct < 60){
+        items.push({type:'warn', text: m.name + ' apresenta baixa consistência.'});
+      } else if(pct >= 85){
+        items.push({type:'ok', text: m.name + ' apresenta estabilidade.'});
+      }
+      if(prevTest){
+        var prevPct = missionPercent(prevTest.rounds, i);
+        if(prevPct !== null && pct < prevPct - 4){
+          items.push({type:'warn', text: m.name + ' apresentou queda em relação ao teste anterior.'});
+        }
+      }
+    });
+    if(!items.length){
+      items.push({type:'ok', text:'Nenhum ponto de atenção no momento.'});
+    }
+    items.forEach(function(it){
+      var d = document.createElement('div');
+      d.className = 'attn-item ' + it.type;
+      d.innerHTML = '<span class="ic">' + (it.type==='warn'?'⚠':'✓') + '</span><span>' + it.text + '</span>';
+      attnEl.appendChild(d);
+    });
+
+    // last rounds
+    var lastEl = document.getElementById('last-rounds');
+    lastEl.innerHTML = '';
+    var last = t.rounds.slice(-6).reverse();
+    last.forEach(function(r){
+      var d = document.createElement('div');
+      d.className = 'round-chip' + (r.invalidated ? ' invalid' : '');
+      var seq = r.results.map(function(v){
+        if(v===null||v===undefined) return '<b class="na">·</b>';
+        return '<b class="'+(v?'ok':'no')+'">'+(v?'S':'N')+'</b>';
+      }).join('');
+      var flag = r.invalidated ? 'invalidada' : (r.correction ? 'corrigida' : '');
+      d.innerHTML = '<span class="rid">#'+r.id+'</span><span class="seq">'+seq+'</span><span class="flag">'+flag+'</span>';
+      lastEl.appendChild(d);
+    });
+  }
+
+  /* ============ Evolução ============ */
+  var evoKeys = ['overall','m1','m2','m3'];
+  var evoLabels = {overall:'Geral', m1:'Missão 1', m2:'Missão 2', m3:'Missão 3'};
+  var evoColors = {overall:'#dcdee2', m1:'#4fd68a', m2:'#e3a53d', m3:'#5ec3d6'};
+  var evoOn = {overall:true, m1:true, m2:true, m3:true};
+
+  function buildEvoControls(){
+    var wrap = document.getElementById('evo-controls');
+    wrap.innerHTML = '';
+    evoKeys.forEach(function(k){
+      var b = document.createElement('button');
+      b.setAttribute('data-k', k);
+      b.className = evoOn[k] ? 'on' : '';
+      b.innerHTML = '<span class="dot"></span>' + evoLabels[k];
+      b.addEventListener('click', function(){
+        evoOn[k] = !evoOn[k];
+        b.classList.toggle('on', evoOn[k]);
+        drawChart();
+      });
+      wrap.appendChild(b);
+    });
+  }
+
+  function drawChart(){
+    var svg = document.getElementById('chart-svg');
+    var snaps = TESTS.map(testSnapshot);
+    var W = 640, H = 240, padL = 34, padR = 14, padT = 14, padB = 26;
+    var innerW = W - padL - padR, innerH = H - padT - padB;
+    var n = snaps.length;
+
+    function x(i){ return padL + (n<=1 ? 0 : i/(n-1) * innerW); }
+    function y(v){ return padT + innerH - (v/100) * innerH; }
+
+    var svgParts = [];
+    // gridlines
+    [0,25,50,75,100].forEach(function(g){
+      svgParts.push('<line x1="'+padL+'" y1="'+y(g)+'" x2="'+(W-padR)+'" y2="'+y(g)+'" stroke="#1a1c22" stroke-width="1"/>');
+      svgParts.push('<text x="'+(padL-8)+'" y="'+(y(g)+3)+'" text-anchor="end" font-size="9" fill="#4a4e58" font-family="JetBrains Mono, monospace">'+g+'</text>');
+    });
+    // x labels
+    snaps.forEach(function(s, i){
+      svgParts.push('<text x="'+x(i)+'" y="'+(H-8)+'" text-anchor="middle" font-size="9" fill="#4a4e58" font-family=\'JetBrains Mono, monospace\'>T'+s.testId+'</text>');
+    });
+
+    evoKeys.forEach(function(k){
+      if(!evoOn[k]) return;
+      var pts = snaps.map(function(s,i){ return s[k]===null ? null : [x(i), y(s[k])]; });
+      var validPts = pts.filter(Boolean);
+      if(validPts.length < 1) return;
+      var path = validPts.map(function(p,i){ return (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+      svgParts.push('<path d="'+path+'" fill="none" stroke="'+evoColors[k]+'" stroke-width="'+(k==='overall'?2.5:1.6)+'" stroke-linecap="round" stroke-linejoin="round"/>');
+      validPts.forEach(function(p){
+        svgParts.push('<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="3" fill="'+evoColors[k]+'"/>');
+      });
+    });
+
+    svg.innerHTML = svgParts.join('');
+
+    var legend = document.getElementById('evo-legend');
+    legend.innerHTML = evoKeys.map(function(k){
+      return '<span><i style="background:'+evoColors[k]+'"></i>'+evoLabels[k]+'</span>';
+    }).join('');
+  }
+
+  function renderEvolucao(){
+    buildEvoControls();
+    var table = document.getElementById('evo-table');
+    if(!TESTS.length){
+      document.getElementById('chart-svg').innerHTML = '';
+      document.getElementById('evo-legend').innerHTML = '';
+      table.innerHTML = '<tr><th>Nenhum teste registrado ainda — use /teste novo no terminal.</th></tr>';
+      return;
+    }
+    drawChart();
+    var snaps = TESTS.map(testSnapshot);
+    var rows = '<tr><th>Teste</th><th>Geral</th><th>Missão 1</th><th>Missão 2</th><th>Missão 3</th></tr>';
+    snaps.forEach(function(s){
+      rows += '<tr><td>' + (getTest(s.testId).active ? s.name + ' (atual)' : s.name) + '</td><td>' +
+        (s.overall===null?'—':s.overall+'%') + '</td><td>' +
+        (s.m1===null?'—':s.m1+'%') + '</td><td>' +
+        (s.m2===null?'—':s.m2+'%') + '</td><td>' +
+        (s.m3===null?'—':s.m3+'%') + '</td></tr>';
+    });
+    table.innerHTML = rows;
+  }
+
+  /* ============ Relatórios ============ */
+  function renderRelatorios(){
+    var all = allRounds();
+    var valid = validRounds(all);
+    var invalidCount = all.length - valid.length;
+    var succ = 0, fail = 0;
+    valid.forEach(function(r){ r.results.forEach(function(v){ if(v===true) succ++; else if(v===false) fail++; }); });
+    var corrections = all.filter(function(r){ return r.correction; });
+
+    var statsEl = document.getElementById('report-stats');
+    var stats = [
+      {v: TESTS.length, l:'Testes', c:''},
+      {v: all.length, l:'Rodadas', c:''},
+      {v: valid.length, l:'Válidas', c:'pos'},
+      {v: invalidCount, l:'Invalidadas', c: invalidCount ? 'neg' : ''},
+      {v: succ, l:'Sucessos', c:'pos'},
+      {v: fail, l:'Falhas', c: fail ? 'warnv' : ''},
+      {v: corrections.length, l:'Corrigidas', c:''}
+    ];
+    statsEl.innerHTML = stats.map(function(s){
+      return '<div class="stat-box '+s.c+'"><div class="sv">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';
+    }).join('');
+
+    var missEl = document.getElementById('report-missions');
+    missEl.innerHTML = MISSIONS.map(function(m, i){
+      var pct = missionPercent(all, i);
+      return '<div class="report-row"><span class="k">'+m.name+' — '+m.label+'</span><span class="v">'+(pct===null?'—':pct+'%')+'</span></div>';
+    }).join('');
+
+    var notesEl = document.getElementById('report-notes');
+    var noteHtml = '';
+    all.filter(function(r){ return r.note; }).forEach(function(r){
+      noteHtml += '<div class="note-item"><span class="tag">#'+r.id+'</span>'+r.note+'</div>';
+    });
+    generalNotes.forEach(function(n){
+      noteHtml += '<div class="note-item"><span class="tag">geral</span>'+n.text+'</div>';
+    });
+    notesEl.innerHTML = noteHtml || '<div class="note-item">Nenhuma observação registrada.</div>';
+
+    var corrEl = document.getElementById('report-corrections');
+    if(corrections.length){
+      corrEl.innerHTML = corrections.map(function(r){
+        return '<div class="note-item correction"><span class="tag">#'+r.id+'</span>' +
+          '<span class="orig">'+roundSeqLabel({results:r.correction.original})+'</span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="new">'+roundSeqLabel({results:r.correction.correctedTo})+'</span>' +
+          '<span class="reason">Motivo: '+r.correction.reason+'</span></div>';
+      }).join('');
+    } else {
+      corrEl.innerHTML = '<div class="note-item">Nenhuma correção registrada.</div>';
+    }
+  }
+
+  /* ============ Dados (importar/exportar — interface visual) ============
+     CSV é formato de importação/exportação; esta tela oferece a mesma
+     função central de exportação (exportCsv) usada pelo comando /csv,
+     sem duplicar lógica. Banco online (Postgres) + IndexedDB como cache
+     local + acesso multi-dispositivo fazem parte do armazenamento
+     estruturado da seção 11/12 do espec — aqui, na ausência de um
+     backend real, o "cache local" é feito via IndexedDB quando
+     disponível (ver camada de persistência mais abaixo), com fallback
+     para localStorage. Sincronização entre contas/dispositivos depende
+     de um backend e está marcada como pendente na aba Dados. */
+  function renderDados(){
+    var statusEl = document.getElementById('storage-status');
+    var backend = (typeof STORAGE_BACKEND !== 'undefined') ? STORAGE_BACKEND : 'localStorage';
+    statusEl.innerHTML =
+      '<div class="stat-box pos"><div class="sv">' + (backend === 'indexeddb' ? 'IndexedDB' : 'localStorage') + '</div><div class="sl">cache local ativo</div></div>' +
+      '<div class="stat-box"><div class="sv">' + TESTS.length + '</div><div class="sl">testes salvos</div></div>' +
+      '<div class="stat-box"><div class="sv">' + allRounds().length + '</div><div class="sl">rodadas salvas</div></div>' +
+      '<div class="stat-box warnv"><div class="sv">—</div><div class="sl">banco online (pendente)</div></div>';
+
+    var listEl = document.getElementById('dados-tests-list');
+    if(!TESTS.length){
+      listEl.innerHTML = '<div class="attn-item"><span class="ic">i</span><span>Nenhum teste criado ainda. Crie um teste no terminal (<b>/teste novo</b>) para importar ou exportar dados.</span></div>';
+      return;
+    }
+    listEl.innerHTML = '';
+    var importRow = document.createElement('div');
+    importRow.className = 'data-import-row';
+    importRow.innerHTML = '<button type="button" id="dados-import-btn">Importar CSV (novo teste)</button>';
+    listEl.appendChild(importRow);
+    document.getElementById('dados-import-btn').addEventListener('click', function(){
+      document.getElementById('csv-file-input').click();
+    });
+
+    TESTS.forEach(function(t){
+      var pct = overallPercent(t.rounds);
+      var card = document.createElement('div');
+      card.className = 'data-test-card';
+      card.innerHTML =
+        '<div class="dtc-info">' +
+          '<div class="dtc-name">' + (t.active ? '▸ ' : '') + t.name + '</div>' +
+          '<div class="dtc-meta">' + t.rounds.length + ' rodadas · desempenho geral ' + (pct===null?'—':pct+'%') + '</div>' +
+        '</div>' +
+        '<div class="dtc-actions"><button type="button" data-export="' + t.id + '">Exportar CSV</button></div>';
+      listEl.appendChild(card);
+    });
+    listEl.querySelectorAll('[data-export]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var t = getTest(parseInt(btn.getAttribute('data-export'), 10));
+        if(t) exportCsv(t);
+      });
+    });
+  }
+
+  /* ============ Ajuda (painel separado, pesquisável) ============ */
+  var AJUDA_DATA = [
+    { group:'Básico', items:[
+      ['cd dashboard | cd evolucao | cd relatorios | cd dados | cd ajuda | cd terminal', 'navega entre as telas'],
+      ['cls', 'limpa o terminal (único comando sem /)'],
+      ['Tab / →', 'autocompleta o comando sugerido'],
+      ['↑ / ↓', 'navega pelo histórico de comandos digitados']
+    ]},
+    { group:'Testes', items:[
+      ['/teste', 'lista todos os testes e o percentual geral de cada um'],
+      ['/teste novo [nome]', 'cria um novo teste e o torna ativo'],
+      ['/selecionar (ou /sel)', 'lista os testes disponíveis'],
+      ['/selecionar 3', 'torna o teste 3 o ativo'],
+      ['/status', 'resumo do teste ativo (rodadas, válidas, invalidadas, desempenho)']
+    ]},
+    { group:'Missões', items:[
+      ['S N S (ou SNS, sem espaços)', 'registra uma rodada (sucesso/falha por missão, na ordem M1 M2 M3)'],
+      ['S N S* (ou SNS*)', 'registra a rodada e marca como invalidada (não entra nas estatísticas)'],
+      ['/missao', 'mostra o percentual de sucesso de cada missão no teste ativo'],
+      ['/selecionar M2', 'mostra resultados e comentários só da Missão 2'],
+      ['@5', 'inicia um mini-teste isolado de 5 rodadas (cálculo próprio, não mistura com o resto)'],
+      ['@5 M2', 'mini-teste de 5 rodadas focado exclusivamente na Missão 2']
+    ]},
+    { group:'Dados', items:[
+      ['S N S # nota', 'adiciona uma observação à rodada'],
+      ['#texto', 'observação geral do teste ativo'],
+      ['!12', 'mostra a rodada 12 (ou a correção, se houver)'],
+      ['!12 S S S # motivo', 'corrige a rodada 12, registrando o motivo'],
+      ['/csv exportar [id]', 'exporta um teste em .csv (também disponível na aba Dados)'],
+      ['/csv importar', 'importa um .csv como novo teste (também disponível na aba Dados)']
+    ]},
+    { group:'Tags', items:[
+      ['# nota #rampa #velocidade', 'uma observação pode ter várias tags'],
+      ['/selecionar #rampa', 'mostra rodadas/observações com a tag #rampa'],
+      ['/selecionar #rampa #velocidade', 'filtra por mais de uma tag ao mesmo tempo']
+    ]},
+    { group:'Histórico', items:[
+      ['/voltar (alias /reload)', 'desfaz a última alteração de dados, sempre pedindo confirmação (y/N)'],
+      ['/remover rodada 12', 'remove a rodada 12, com confirmação — desfazível com /voltar'],
+      ['/remover teste [id]', 'remove um teste inteiro, com confirmação — desfazível com /voltar'],
+      ['/historico', 'lista as últimas rodadas do teste ativo']
+    ]},
+    { group:'Comandos avançados', items:[
+      ['/sincronizar 1 2 [nome]', 'junta dois testes em um novo (M1 com M1, M2 com M2…), sem média simples, preservando os originais'],
+      ['/evolucao', 'resumo do percentual geral de cada teste'],
+      ['/relatorio', 'resumo geral de todos os testes e rodadas'],
+      ['/resetar confirmar', 'apaga todos os dados salvos neste dispositivo']
+    ]}
+  ];
+
+  function renderAjuda(filter){
+    var wrap = document.getElementById('ajuda-content');
+    var q = (filter || '').trim().toLowerCase();
+    wrap.innerHTML = '';
+    AJUDA_DATA.forEach(function(g){
+      var rows = g.items.filter(function(it){
+        return !q || it[0].toLowerCase().indexOf(q) !== -1 || it[1].toLowerCase().indexOf(q) !== -1;
+      });
+      if(!rows.length) return;
+      var groupEl = document.createElement('div');
+      groupEl.className = 'ajuda-group';
+      groupEl.innerHTML = '<h4>' + g.group + '</h4>' + rows.map(function(it){
+        return '<div class="ajuda-row"><code>' + escapeHtml(it[0]) + '</code><span class="desc">' + escapeHtml(it[1]) + '</span></div>';
+      }).join('');
+      wrap.appendChild(groupEl);
+    });
+    if(!wrap.children.length){
+      wrap.innerHTML = '<div class="attn-item"><span class="ic">i</span><span>Nenhum comando encontrado para "' + escapeHtml(filter) + '".</span></div>';
+    }
+  }
+
+  document.getElementById('ajuda-search').addEventListener('input', function(e){
+    renderAjuda(e.target.value);
+  });
+
+  /* ============ Init ============ */
+  bootTerminal();
+  setView(0);
+  input.focus();
+
+})();
+</script>
+</body>
+</html>
