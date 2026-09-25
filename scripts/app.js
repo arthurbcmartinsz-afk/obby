@@ -2,6 +2,5 @@
 
   /* ============ Init ============ */
   bootTerminal();
-  setView(0);
-  input.focus();
+  setView(0, {noFocus:true});
 

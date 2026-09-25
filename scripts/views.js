@@ -15,14 +15,13 @@
 
     var cardsEl = document.getElementById('mission-cards');
     cardsEl.innerHTML = '';
-    MISSIONS.forEach(function(m, i){
+    missionsFor(t).forEach(function(m, i){
       var pct = missionPercent(t.rounds, i);
       var cls = pct===null ? '' : pct < 60 ? 'low' : pct < 85 ? 'mid' : 'high';
       var card = document.createElement('div');
       card.className = 'mission-card ' + cls;
       card.innerHTML =
-        '<div class="mname">' + m.name + '</div>' +
-        '<div class="mlabel">' + m.label + '</div>' +
+        '<div class="mname">' + escapeHtml(m.name) + '</div>' +
         '<div class="mpct">' + (pct===null?'—':pct+'%') + '</div>' +
         '<div class="mbar"><i style="width:' + (pct||0) + '%"></i></div>';
       cardsEl.appendChild(card);
@@ -31,21 +30,14 @@
     // attention points
     var attnEl = document.getElementById('attn-list');
     attnEl.innerHTML = '';
-    var prevTest = getTest(t.id - 1);
     var items = [];
-    MISSIONS.forEach(function(m, i){
+    missionsFor(t).forEach(function(m, i){
       var pct = missionPercent(t.rounds, i);
       if(pct === null) return;
       if(pct < 60){
         items.push({type:'warn', text: m.name + ' apresenta baixa consistência.'});
       } else if(pct >= 85){
         items.push({type:'ok', text: m.name + ' apresenta estabilidade.'});
-      }
-      if(prevTest){
-        var prevPct = missionPercent(prevTest.rounds, i);
-        if(prevPct !== null && pct < prevPct - 4){
-          items.push({type:'warn', text: m.name + ' apresentou queda em relação ao teste anterior.'});
-        }
       }
     });
     if(!items.length){
@@ -67,10 +59,10 @@
       d.className = 'round-chip' + (r.invalidated ? ' invalid' : '');
       var seq = r.results.map(function(v){
         if(v===null||v===undefined) return '<b class="na">·</b>';
-        return '<b class="'+(v?'ok':'no')+'">'+(v?'S':'N')+'</b>';
+        return '<b class="'+resultCls(v)+'">'+resultLabel(v)+'</b>';
       }).join('');
       var flag = r.invalidated ? 'invalidada' : (r.correction ? 'corrigida' : '');
-      d.innerHTML = '<span class="rid">#'+r.id+'</span><span class="seq">'+seq+'</span><span class="flag">'+flag+'</span>';
+      d.innerHTML = '<span class="rid">#'+r.id+'</span><span class="seq">'+seq+'</span>' + (r.time!==null?'<span class="time">'+formatTime(r.time)+'</span>':'') + '<span class="flag">'+flag+'</span>';
       lastEl.appendChild(d);
     });
   }
@@ -185,18 +177,22 @@
     }).join('');
 
     var missEl = document.getElementById('report-missions');
-    missEl.innerHTML = MISSIONS.map(function(m, i){
-      var pct = missionPercent(all, i);
-      return '<div class="report-row"><span class="k">'+m.name+' — '+m.label+'</span><span class="v">'+(pct===null?'—':pct+'%')+'</span></div>';
-    }).join('');
+    var missionRows = '';
+    TESTS.forEach(function(test){
+      missionsFor(test).forEach(function(m, i){
+        var pct = missionPercent(test.rounds, i);
+        missionRows += '<div class="report-row"><span class="k">'+escapeHtml(test.name)+' — '+escapeHtml(m.name)+'</span><span class="v">'+(pct===null?'—':pct+'%')+'</span></div>';
+      });
+    });
+    missEl.innerHTML = missionRows || '<div class="note-item">Nenhuma missão registrada.</div>';
 
     var notesEl = document.getElementById('report-notes');
     var noteHtml = '';
     all.filter(function(r){ return r.note; }).forEach(function(r){
-      noteHtml += '<div class="note-item"><span class="tag">#'+r.id+'</span>'+r.note+'</div>';
+      noteHtml += '<div class="note-item"><span class="tag">#'+r.id+'</span>'+escapeHtml(r.note)+'</div>';
     });
     generalNotes.forEach(function(n){
-      noteHtml += '<div class="note-item"><span class="tag">geral</span>'+n.text+'</div>';
+      noteHtml += '<div class="note-item"><span class="tag">geral</span>'+escapeHtml(n.text)+'</div>';
     });
     notesEl.innerHTML = noteHtml || '<div class="note-item">Nenhuma observação registrada.</div>';
 
@@ -226,37 +222,67 @@
      de um backend e está marcada como pendente na aba Dados. */
   function renderDados(){
     var statusEl = document.getElementById('storage-status');
-    var backend = (typeof STORAGE_BACKEND !== 'undefined') ? STORAGE_BACKEND : 'localStorage';
+    var backend = idbReady ? 'IndexedDB' : 'localStorage';
     statusEl.innerHTML =
-      '<div class="stat-box pos"><div class="sv">' + (backend === 'indexeddb' ? 'IndexedDB' : 'localStorage') + '</div><div class="sl">cache local ativo</div></div>' +
+      '<div class="stat-box pos"><div class="sv">' + backend + '</div><div class="sl">banco persistente</div></div>' +
       '<div class="stat-box"><div class="sv">' + TESTS.length + '</div><div class="sl">testes salvos</div></div>' +
       '<div class="stat-box"><div class="sv">' + allRounds().length + '</div><div class="sl">rodadas salvas</div></div>' +
       '<div class="stat-box warnv"><div class="sv">—</div><div class="sl">banco online (pendente)</div></div>';
 
+    var newButton = document.getElementById('btn-novo-teste');
+    if(newButton) newButton.onclick = openNewTestModal;
+    var importButton = document.getElementById('dados-import-btn');
+    if(importButton) importButton.onclick = function(){ document.getElementById('csv-file-input').click(); };
+
+    var backupButton = document.getElementById('dados-backup-btn');
+    var backupFeedback = document.getElementById('dados-backup-feedback');
+    var backupAvailable = hasPersistedDataForBackup(readPersistedStateForBackup());
+    backupButton.disabled = !backupAvailable;
+    backupFeedback.textContent = backupAvailable
+      ? 'O arquivo incluirá todos os dados salvos neste navegador.'
+      : 'Não há dados salvos neste navegador para exportar.';
+    backupButton.onclick = function(){
+      var backup = createObbyBackup();
+      if(!backup){
+        backupButton.disabled = true;
+        backupFeedback.textContent = 'Não há dados salvos neste navegador para exportar.';
+        return;
+      }
+
+      var contents = JSON.stringify(backup, null, 2) + '\n';
+      var blob = new Blob([contents], {type:'application/json;charset=utf-8'});
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      var timestamp = backup.exportedAt.replace(/[:.]/g, '-');
+      link.href = url;
+      link.download = 'obby-backup-' + timestamp + '.obby';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      backupFeedback.textContent = 'Backup baixado. Guarde e envie o arquivo sem alterar seu conteúdo.';
+    };
+
     var listEl = document.getElementById('dados-tests-list');
     if(!TESTS.length){
-      listEl.innerHTML = '<div class="attn-item"><span class="ic">i</span><span>Nenhum teste criado ainda. Crie um teste no terminal (<b>/teste novo</b>) para importar ou exportar dados.</span></div>';
+      listEl.innerHTML = '<div class="attn-item"><span class="ic">i</span><span>Nenhum teste criado ainda. Clique em <b>Novo Teste</b> para começar.</span></div>';
       return;
     }
     listEl.innerHTML = '';
-    var importRow = document.createElement('div');
-    importRow.className = 'data-import-row';
-    importRow.innerHTML = '<button type="button" id="dados-import-btn">Importar CSV (novo teste)</button>';
-    listEl.appendChild(importRow);
-    document.getElementById('dados-import-btn').addEventListener('click', function(){
-      document.getElementById('csv-file-input').click();
-    });
 
     TESTS.forEach(function(t){
       var pct = overallPercent(t.rounds);
       var card = document.createElement('div');
-      card.className = 'data-test-card';
+      card.className = 'data-test-card' + (t.active ? ' is-active' : '');
       card.innerHTML =
         '<div class="dtc-info">' +
-          '<div class="dtc-name">' + (t.active ? '▸ ' : '') + t.name + '</div>' +
+          '<div class="dtc-name">' + escapeHtml(t.name) + (t.active ? '<span class="pill">ativo</span>' : '') + '</div>' +
           '<div class="dtc-meta">' + t.rounds.length + ' rodadas · desempenho geral ' + (pct===null?'—':pct+'%') + '</div>' +
+          '<div class="dtc-missions">' + missionsFor(t).map(function(m){return escapeHtml(m.name);}).join(' · ') + '</div>' +
         '</div>' +
-        '<div class="dtc-actions"><button type="button" data-export="' + t.id + '">Exportar CSV</button></div>';
+        '<div class="dtc-actions">' + (t.active?'':'<button type="button" class="btn small" data-activate="'+t.id+'">Tornar ativo</button>') +
+        '<button type="button" class="btn small ghost" data-sync="'+t.id+'"'+(TESTS.length<2?' disabled':'')+'>Sincronizar</button>' +
+        '<button type="button" class="btn small" data-export="' + t.id + '">Exportar CSV</button></div>';
       listEl.appendChild(card);
     });
     listEl.querySelectorAll('[data-export]').forEach(function(btn){
@@ -265,12 +291,103 @@
         if(t) exportCsv(t);
       });
     });
+    listEl.querySelectorAll('[data-activate]').forEach(function(btn){
+      btn.onclick = function(){ activateTest(parseInt(btn.getAttribute('data-activate'),10)); renderDados(); refreshAllViews(); };
+    });
+    listEl.querySelectorAll('[data-sync]').forEach(function(btn){
+      btn.onclick = function(){ openSyncModal(parseInt(btn.getAttribute('data-sync'),10)); };
+    });
   }
+
+  var overlay = document.getElementById('modal-overlay');
+  var modalPanel = document.getElementById('modal-panel');
+  function modalOpen(){ return !overlay.classList.contains('hidden'); }
+  function closeModal(){ overlay.classList.add('hidden'); modalPanel.innerHTML = ''; }
+  function openModal(title, bodyHtml, footHtml){
+    modalPanel.innerHTML = '<div class="modal-head"><h3>'+escapeHtml(title)+'</h3><button type="button" class="modal-close" id="modal-x">×</button></div><div class="modal-body">'+bodyHtml+'</div>'+(footHtml?'<div class="modal-foot">'+footHtml+'</div>':'');
+    overlay.classList.remove('hidden');
+    document.getElementById('modal-x').onclick = closeModal;
+  }
+  overlay.addEventListener('click',function(e){if(e.target===overlay)closeModal();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&modalOpen()&&!(timerState&&timerState.running))closeModal();});
+
+  function openNewTestModal(){
+    var body='<div class="field-label">Nome do teste</div><input type="text" class="field-input" id="nt-name" placeholder="ex: Teste Rampa"><div class="field-label">Missões</div><div id="nt-missions"></div><button type="button" class="add-mission-btn" id="nt-add">+</button>';
+    openModal('Novo Teste',body,'<button type="button" class="btn ghost" id="nt-cancel">Cancelar</button><button type="button" class="btn primary" id="nt-confirm">Criar teste</button>');
+    var wrap=document.getElementById('nt-missions');
+    function addMission(value){var row=document.createElement('div');row.className='mission-row';row.innerHTML='<input type="text" class="field-input" placeholder="Nome da missão" value="'+escapeHtml(value||'')+'"><button type="button" class="rm-btn">×</button>';row.querySelector('.rm-btn').onclick=function(){if(wrap.children.length>1)row.remove();};wrap.appendChild(row);}
+    addMission('');
+    document.getElementById('nt-add').onclick=function(){addMission('');};
+    document.getElementById('nt-cancel').onclick=closeModal;
+    document.getElementById('nt-confirm').onclick=function(){
+      var name=document.getElementById('nt-name').value.trim();
+      var names=Array.prototype.map.call(wrap.querySelectorAll('input'),function(el){return el.value.trim();}).filter(Boolean);
+      if(!names.length)names=['Missão 1'];
+      var test=createNewTest(name,names); closeModal(); refreshAllViews(); renderDados();
+      if(VIEWS[currentView]==='terminal')printLine('Novo teste criado: '+test.name+' ('+test.missions.length+' missões). Teste ativo agora.','ok');
+    };
+  }
+
+  function combineValue(a,b){a=resultValue(a);b=resultValue(b);if(a===null)return b;if(b===null)return a;return (a+b)/2;}
+  function syncTests(t1,t2,name,names){
+    var count=Math.min(missionsFor(t1).length,missionsFor(t2).length), labels=[];
+    for(var i=0;i<count;i++) labels.push((names&&names[i])||missionsFor(t1)[i].name+' Média');
+    var combined=createNewTest(name,labels), rows=[];
+    for(var r=0;r<Math.min(t1.rounds.length,t2.rounds.length);r++){
+      var a=t1.rounds[r],b=t2.rounds[r],results=[];
+      for(var j=0;j<count;j++)results.push(combineValue(a.results[j],b.results[j]));
+      var ta=typeof a.time==='number'?a.time:null,tb=typeof b.time==='number'?b.time:null;
+      rows.push(makeRound(combined.id,results,{invalidated:a.invalidated||b.invalidated,note:[a.note,b.note].filter(Boolean).join(' | '),tags:(a.tags||[]).concat(b.tags||[]),time:ta!==null&&tb!==null?(ta+tb)/2:(ta!==null?ta:tb)}));
+    }
+    combined.rounds=rows;saveState();return combined;
+  }
+  function openSyncModal(preselectId){
+    if(TESTS.length<2){openModal('Sincronizar','<div class="modal-hint">É preciso ter pelo menos dois testes cadastrados.</div>','<button class="btn ghost" id="sy-close">Fechar</button>');document.getElementById('sy-close').onclick=closeModal;return;}
+    var options=TESTS.map(function(t){return '<option value="'+t.id+'">'+escapeHtml(t.name)+' ('+missionsFor(t).length+' missões)</option>';}).join('');
+    openModal('Sincronizar testes','<div class="field-label">Teste 1</div><select class="select-input" id="sy-t1">'+options+'</select><div class="field-label">Teste 2</div><select class="select-input" id="sy-t2">'+options+'</select><div class="field-label">Nome do novo teste</div><input class="field-input" id="sy-name" placeholder="ex: Teste Sincronizado"><div class="modal-hint">Combina as missões pela posição usando média simples. Os testes originais são preservados.</div>','<button class="btn ghost" id="sy-cancel">Cancelar</button><button class="btn primary" id="sy-confirm">Sincronizar</button>');
+    var first=document.getElementById('sy-t1'); if(preselectId!==undefined) first.value=preselectId;
+    var second=document.getElementById('sy-t2'); if(second.value===first.value)second.selectedIndex=1;
+    document.getElementById('sy-cancel').onclick=closeModal;
+    document.getElementById('sy-confirm').onclick=function(){var a=getTest(parseInt(first.value,10)),b=getTest(parseInt(second.value,10));if(a===b){alert('Escolha dois testes diferentes.');return;}var name=document.getElementById('sy-name').value.trim()||a.name+' + '+b.name;var combined=syncTests(a,b,name);closeModal();refreshAllViews();renderDados();};
+  }
+  function openSelectModal(){
+    var html=TESTS.map(function(t){var pct=overallPercent(t.rounds);return '<div class="data-test-card'+(t.active?' is-active':'')+'"><div class="dtc-info"><div class="dtc-name">'+escapeHtml(t.name)+(t.active?'<span class="pill">ativo</span>':'')+'</div><div class="dtc-meta">'+missionsFor(t).length+' missões · '+t.rounds.length+' rodadas · '+(pct===null?'—':pct+'%')+'</div></div>'+(t.active?'':'<button type="button" class="btn small" data-select="'+t.id+'">Tornar ativo</button>')+'</div>';}).join('')||'<div class="modal-hint">Nenhum teste cadastrado ainda.</div>';
+    openModal('Selecionar teste',html,'<button type="button" class="btn ghost" id="sel-close">Fechar</button>');
+    document.getElementById('sel-close').onclick=closeModal;
+    modalPanel.querySelectorAll('[data-select]').forEach(function(btn){btn.onclick=function(){activateTest(parseInt(btn.getAttribute('data-select'),10));closeModal();refreshAllViews();renderDados();};});
+  }
+
+  var TIME_GREEN_RATIO=1;
+  var timerState={running:false,startedAt:0,elapsedBefore:0,intervalId:null};
+  var pendingTime=null;
+  function formatTime(sec){return sec===null||sec===undefined?'—':sec.toFixed(1)+'s';}
+  function currentElapsed(){return timerState.running?timerState.elapsedBefore+(Date.now()-timerState.startedAt)/1000:timerState.elapsedBefore;}
+  function referenceTime(test){var times=test?validRounds(test.rounds).map(function(r){return r.time;}).filter(function(v){return typeof v==='number';}):[];return times.length?times.reduce(function(a,b){return a+b;},0)/times.length:null;}
+  function renderTimeTab(){
+    var t=getActiveTest();document.getElementById('tv-test').textContent=t?t.name:'— nenhum teste ativo —';
+    var focus=pendingMini&&pendingMini.missionIdx!==null&&t?missionsFor(t)[pendingMini.missionIdx]:null;
+    document.getElementById('tv-mission').textContent=!t?'—':(focus?focus.name:'Todas as missões');
+    document.getElementById('tv-round').textContent=t?'Rodada '+(t.rounds.length+1):'—';
+    var prev=t?t.rounds.filter(function(r){return typeof r.time==='number';}).slice(-2):[];
+    document.getElementById('tv-prev').innerHTML=prev.length?prev.map(function(r){return '<div class="round-chip"><span class="rid">Rodada '+r.id+'</span><span class="time">'+formatTime(r.time)+'</span></div>';}).join(''):'<div class="modal-hint">Sem rodadas anteriores com tempo registrado ainda.</div>';
+    var ready=document.getElementById('time-ready');ready.textContent=pendingTime!==null?'Tempo pronto: '+formatTime(pendingTime)+' — será associado à próxima rodada registrada.':'';ready.classList.toggle('show',pendingTime!==null);tickTimerDisplay();
+  }
+  function tickTimerDisplay(){var display=document.getElementById('time-display');if(!display)return;var elapsed=currentElapsed(),ref=referenceTime(getActiveTest());display.textContent=elapsed.toFixed(1);display.className='time-display-big '+(ref===null?'':elapsed/ref<=TIME_GREEN_RATIO?'c-green':'c-gray');}
+  function stopTicking(){if(timerState.intervalId){clearInterval(timerState.intervalId);timerState.intervalId=null;}}
+  function timerSpacePress(){if(timerState.running){timerState.elapsedBefore=currentElapsed();timerState.running=false;stopTicking();}else{timerState.running=true;timerState.startedAt=Date.now();timerState.intervalId=setInterval(tickTimerDisplay,100);}tickTimerDisplay();}
+  function timerEnterPress(){timerState.elapsedBefore=currentElapsed();timerState.running=false;stopTicking();pendingTime=timerState.elapsedBefore;renderTimeTab();}
+  function timerResetPress(){timerState.running=false;timerState.elapsedBefore=0;stopTicking();renderTimeTab();}
+  document.getElementById('tm-reset').onclick=timerResetPress;
+  document.addEventListener('keydown',function(e){if(VIEWS[currentView]!=='time'||modalOpen()||document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA')return;if(e.code==='Space'||e.key===' '){e.preventDefault();timerSpacePress();}else if(e.key==='Enter'){e.preventDefault();timerEnterPress();}});
+  var homeScreen=document.getElementById('home-screen');
+  function enterApp(){homeScreen.classList.add('hidden');setView(0,{noFocus:true});input.focus();}
+  document.getElementById('home-enter').onclick=enterApp;
+  document.addEventListener('keydown',function(e){if(!homeScreen.classList.contains('hidden')&&e.key==='Enter')enterApp();});
 
   /* ============ Ajuda (painel separado, pesquisável) ============ */
   var AJUDA_DATA = [
     { group:'Básico', items:[
-      ['cd dashboard | cd evolucao | cd relatorios | cd dados | cd ajuda | cd terminal', 'navega entre as telas'],
+      ['cd time | cd dashboard | cd relatorios | cd dados | cd ajuda | cd terminal', 'navega entre as telas'],
       ['cls', 'limpa o terminal (único comando sem /)'],
       ['Tab / →', 'autocompleta o comando sugerido'],
       ['↑ / ↓', 'navega pelo histórico de comandos digitados']
@@ -278,12 +395,12 @@
     { group:'Testes', items:[
       ['/teste', 'lista todos os testes e o percentual geral de cada um'],
       ['/teste novo [nome]', 'cria um novo teste e o torna ativo'],
-      ['/selecionar (ou /sel)', 'lista os testes disponíveis'],
+      ['/select *', 'abre a interface para selecionar o teste ativo'],
       ['/selecionar 3', 'torna o teste 3 o ativo'],
       ['/status', 'resumo do teste ativo (rodadas, válidas, invalidadas, desempenho)']
     ]},
     { group:'Missões', items:[
-      ['S N S (ou SNS, sem espaços)', 'registra uma rodada (sucesso/falha por missão, na ordem M1 M2 M3)'],
+      ['S N S (ou SNS, sem espaços)', 'registra uma rodada (sucesso/falha por missão, na ordem configurada no teste)'],
       ['S N S* (ou SNS*)', 'registra a rodada e marca como invalidada (não entra nas estatísticas)'],
       ['/missao', 'mostra o percentual de sucesso de cada missão no teste ativo'],
       ['/selecionar M2', 'mostra resultados e comentários só da Missão 2'],
@@ -310,8 +427,8 @@
       ['/historico', 'lista as últimas rodadas do teste ativo']
     ]},
     { group:'Comandos avançados', items:[
-      ['/sincronizar 1 2 [nome]', 'junta dois testes em um novo (M1 com M1, M2 com M2…), sem média simples, preservando os originais'],
-      ['/evolucao', 'resumo do percentual geral de cada teste'],
+      ['Aba Time ou /time', 'cronômetro: Espaço inicia/pausa/continua e Enter associa o tempo à próxima rodada'],
+      ['Dados → Sincronizar', 'combina dois testes por média simples, missão pela posição, preservando os originais'],
       ['/relatorio', 'resumo geral de todos os testes e rodadas'],
       ['/resetar confirmar', 'apaga todos os dados salvos neste dispositivo']
     ]}

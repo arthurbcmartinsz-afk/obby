@@ -35,11 +35,24 @@
     if(t) printLine('Teste ativo: ' + t.name, 'dim');
   }
 
-  function missionResultsHtml(results){
+  function resultCls(v){
+    if(v === null || v === undefined) return 'na';
+    if(v === true) return 'ok';
+    if(v === false) return 'no';
+    return 'mix';
+  }
+  function resultLabel(v){
+    if(v === null || v === undefined) return '·';
+    if(v === true) return 'S';
+    if(v === false) return 'N';
+    return Math.round(v*100)+'%';
+  }
+  function missionResultsHtml(test, results){
     return results.map(function(v, i){
       if(v === null || v === undefined) return '';
-      var cls = v ? 'ok' : 'no';
-      return '<div class="res-row"><span class="m">'+MISSIONS[i].name+'</span><span class="v '+cls+'">'+(v?'SUCESSO':'FALHA')+'</span></div>';
+      var cls = resultCls(v), name = missionsFor(test)[i] ? missionsFor(test)[i].name : ('Missão '+(i+1));
+      var label = v===true?'SUCESSO':(v===false?'FALHA':(Math.round(v*100)+'% (média)'));
+      return '<div class="res-row"><span class="m">'+escapeHtml(name)+'</span><span class="v '+cls+'">'+label+'</span></div>';
     }).join('');
   }
 
@@ -47,7 +60,9 @@
     var t = getActiveTest();
     if(!t) return null;
     var tags = extractTags(note);
-    var r = makeRound(t.id, results, {invalidated:invalidated, note:note||'', tags:tags, type:type||'full', focusedMission:focusedMission||null});
+    var opts = {invalidated:invalidated, note:note||'', tags:tags, type:type||'full', focusedMission:typeof focusedMission === 'number' ? focusedMission : null};
+    if(pendingTime !== null){ opts.time = pendingTime; pendingTime = null; if(VIEWS[currentView] === 'time') renderTimeTab(); }
+    var r = makeRound(t.id, results, opts);
     t.rounds.push(r);
     saveState();
     pushAction('registrar rodada #' + r.id + ' (' + t.name + ')', function(){
@@ -165,7 +180,7 @@
     var cdMatch = trimmed.match(/^cd\s+(\S+)/i);
     if(cdMatch){
       var dest = cdMatch[1].toLowerCase();
-      var map = {dashboard:'dashboard', dash:'dashboard', evolucao:'evolucao', evo:'evolucao', relatorios:'relatorios', rel:'relatorios', terminal:'terminal', term:'terminal', dados:'dados', data:'dados', ajuda:'ajuda', help:'ajuda'};
+      var map = {dashboard:'dashboard', dash:'dashboard', relatorios:'relatorios', rel:'relatorios', terminal:'terminal', term:'terminal', dados:'dados', data:'dados', ajuda:'ajuda', help:'ajuda', time:'time', cronometro:'time'};
       if(map[dest]){
         printLine('Abrindo ' + VIEW_LABELS[map[dest]].toLowerCase() + '…', 'dim');
         var idx = VIEWS.indexOf(map[dest]);
@@ -192,7 +207,7 @@
     }
 
     // mini-test start
-    var miniMatch = trimmed.match(/^@(\d+)(?:\s+M(\d))?/i);
+    var miniMatch = trimmed.match(/^@(\d+)(?:\s+M(\d+))?/i);
     if(miniMatch){
       startMiniTest(parseInt(miniMatch[1],10), miniMatch[2] ? parseInt(miniMatch[2],10)-1 : null);
       scrollLog();
@@ -238,10 +253,11 @@
         scrollLog();
         return;
       }
-      while(parsed.results.length < MISSIONS.length) parsed.results.push(null);
+      while(parsed.results.length < atest.missions.length) parsed.results.push(null);
       var round = registerRound(parsed.results, parsed.invalidated, notePart);
       printLine('Rodada registrada ✓', 'ok');
-      printBlock('<div style="margin-top:4px;">' + missionResultsHtml(round.results) + '</div>');
+      printBlock('<div style="margin-top:4px;">' + missionResultsHtml(atest, round.results) + '</div>');
+      if(round.time !== null) printLine('⏱ tempo associado: ' + formatTime(round.time), 'dim');
       if(parsed.invalidated) printLine('⚠ rodada marcada como invalidada — não entra nas estatísticas', 'warn');
       if(notePart) printLine('# ' + notePart, 'dim');
       scrollLog();
@@ -256,7 +272,8 @@
     if(!getActiveTest()){ printLine('Nenhum teste ativo. Use "/teste novo" para criar um teste antes.', 'err'); return; }
     if(count < 1 || count > 50){ printLine('Quantidade inválida para mini-teste.', 'err'); return; }
     pendingMini = {count:count, missionIdx: missionIdx, done:0, collected:[]};
-    var label = missionIdx !== null ? (' focado em ' + MISSIONS[missionIdx].name) : '';
+    var t = getActiveTest();
+    var label = missionIdx !== null ? (' focado em ' + missionsFor(t)[missionIdx].name) : '';
     printLine('Mini-teste iniciado: ' + count + ' rodadas' + label + '.', 'ok');
     printLine('Digite os resultados um de cada vez (ESC cancela).', 'dim');
   }
@@ -271,12 +288,12 @@
     if(pendingMini.missionIdx !== null){
       var single = trimmed.toUpperCase().replace(/\*/g,'').trim();
       if(single !== 'S' && single !== 'N'){ printLine('Esperando S ou N.', 'err'); return; }
-      var res = [null,null,null];
+      var res = missionsFor(getActiveTest()).map(function(){return null;});
       res[pendingMini.missionIdx] = (single === 'S');
       round = registerRound(res, false, '', 'focused', pendingMini.missionIdx);
     } else {
       var parsed = tokenizeResultString(trimmed);
-      while(parsed.results.length < MISSIONS.length) parsed.results.push(null);
+      while(parsed.results.length < missionsFor(getActiveTest()).length) parsed.results.push(null);
       round = registerRound(parsed.results, parsed.invalidated, '');
     }
     pendingMini.done += 1;
@@ -294,9 +311,9 @@
     if(pendingMini.missionIdx !== null){
       var idx = pendingMini.missionIdx;
       var pct = missionPercent(rounds, idx);
-      printLine(MISSIONS[idx].name + ': ' + (pct===null?'—':pct+'%') + ' de sucesso nesta série', 'out');
+      printLine(missionsFor(getActiveTest())[idx].name + ': ' + (pct===null?'—':pct+'%') + ' de sucesso nesta série', 'out');
     } else {
-      MISSIONS.forEach(function(m, i){
+      missionsFor(getActiveTest()).forEach(function(m, i){
         var pct = missionPercent(rounds, i);
         printLine(m.name + ': ' + (pct===null?'—':pct+'%'), 'out');
       });
@@ -339,9 +356,9 @@
     } else if(cmd === 'missao'){
       var t = getActiveTest();
       if(!t){ printLine('Nenhum teste ativo. Use "/teste novo" para criar um teste.', 'err'); return; }
-      MISSIONS.forEach(function(m, i){
+      missionsFor(t).forEach(function(m, i){
         var pct = missionPercent(t.rounds, i);
-        printLine(m.name + ' (' + m.label + ')  —  ' + (pct===null?'sem dados':pct+'% de sucesso'), 'out');
+        printLine(m.name + '  —  ' + (pct===null?'sem dados':pct+'% de sucesso'), 'out');
       });
     } else if(cmd === 'status'){
       var t2 = getActiveTest();
@@ -362,13 +379,8 @@
       rs.forEach(function(r){
         printLine('#' + r.id + '  ' + roundSeqLabel(r) + (r.invalidated?'  (invalidada)':'') + (r.correction?'  (corrigida)':''), r.invalidated?'dim':'out');
       });
-    } else if(cmd === 'evolucao'){
-      if(!TESTS.length){ printLine('Nenhum teste registrado ainda.', 'warn'); return; }
-      TESTS.forEach(function(t){
-        var s = testSnapshot(t);
-        printLine(t.name + ':  ' + (s.overall===null?'—':s.overall+'%'), 'out');
-      });
-      printLine('(cd evolucao para o gráfico completo)', 'dim');
+    } else if(cmd === 'time'){
+      setView(VIEWS.indexOf('time'), {noFocus:true});
     } else if(cmd === 'relatorio'){
       var all = allRounds();
       var valid2 = validRounds(all);
@@ -417,7 +429,8 @@
       } else {
         printLine('Uso: /remover rodada <id>  ou  /remover teste [id]', 'err');
       }
-    } else if(cmd === 'selecionar' || cmd === 'sel'){
+    } else if(cmd === 'selecionar' || cmd === 'select' || cmd === 'sel'){
+      if(rest.trim() === '*'){ openSelectModal(); return; }
       if(!rest){
         if(!TESTS.length){ printLine('Nenhum teste criado ainda.', 'warn'); return; }
         TESTS.forEach(function(t){
@@ -443,17 +456,18 @@
         });
         return;
       }
-      var mMatch = rest.match(/^M(\d)$/i);
+      var mMatch = rest.match(/^M(\d+)$/i);
       if(mMatch){
         var midx = parseInt(mMatch[1],10) - 1;
         var atest = getActiveTest();
         if(!atest){ printLine('Nenhum teste ativo.', 'err'); return; }
-        if(!MISSIONS[midx]){ printLine('Missão inválida.', 'err'); return; }
+        var mission = missionsFor(atest)[midx];
+        if(!mission){ printLine('Missão inválida.', 'err'); return; }
         var pct = missionPercent(atest.rounds, midx);
-        printLine(MISSIONS[midx].name + ' (' + MISSIONS[midx].label + ')  —  ' + (pct===null?'sem dados':pct+'%'), 'ok');
+        printLine(mission.name + '  —  ' + (pct===null?'sem dados':pct+'%'), 'ok');
         var relRounds = atest.rounds.filter(function(r){ return r.results[midx] !== null && r.results[midx] !== undefined; });
         relRounds.slice(-10).forEach(function(r){
-          printLine('  #' + r.id + '  ' + (r.results[midx] ? 'S' : 'N') + (r.note ? '  — ' + r.note : ''), 'dim');
+          printLine('  #' + r.id + '  ' + resultLabel(r.results[midx]) + (r.note ? '  — ' + r.note : ''), 'dim');
         });
         return;
       }
@@ -464,22 +478,7 @@
       saveState();
       printLine('Teste selecionado: ' + target2.name, 'ok');
     } else if(cmd === 'sincronizar'){
-      var sArgs = rest.split(/\s+/).filter(Boolean);
-      if(sArgs.length < 2){ printLine('Uso: /sincronizar <id1> <id2> [nome do novo teste]', 'err'); return; }
-      var id1 = parseInt(sArgs[0],10), id2 = parseInt(sArgs[1],10);
-      var t1 = getTest(id1), t2 = getTest(id2);
-      if(!t1 || !t2){ printLine('Um ou ambos os testes não foram encontrados.', 'err'); return; }
-      var newName = sArgs.length > 2 ? sArgs.slice(2).join(' ') : (t1.name + ' + ' + t2.name);
-      askConfirm('Sincronizar "' + t1.name + '" com "' + t2.name + '" em um novo teste "' + newName + '"? Os testes originais são preservados.', function(){
-        var combined = createNewTest(newName);
-        var copiedRounds = t1.rounds.concat(t2.rounds).map(function(r){
-          return makeRound(combined.id, r.results.slice(), {invalidated:r.invalidated, note:r.note, tags:(r.tags||[]).slice(), type:r.type, focusedMission:r.focusedMission});
-        });
-        combined.rounds = copiedRounds;
-        saveState();
-        printLine('Testes sincronizados em "' + combined.name + '" (' + combined.rounds.length + ' rodadas). M1 com M1, M2 com M2 etc. — dados originais preservados em ' + t1.name + ' e ' + t2.name + '.', 'ok');
-        refreshAllViews();
-      });
+      openSyncModal();
     } else if(cmd === 'csv'){
       var csvSpace = rest.search(/\s/);
       var csvSub = (csvSpace === -1 ? rest : rest.slice(0, csvSpace)).toLowerCase();
@@ -501,7 +500,7 @@
   }
 
   function roundSeqLabel(r){
-    return r.results.map(function(v){ return v===null||v===undefined ? '·' : (v?'S':'N'); }).join(' ');
+    return r.results.map(function(v){ return resultLabel(v); }).join(' ');
   }
 
   function handleCorrection(trimmed){
@@ -530,7 +529,7 @@
     var reason = parts.length > 1 ? parts.slice(1).join('#').trim() : 'não informado';
     var parsed = tokenizeResultString(seqPart);
     if(!parsed.results.length){ printLine('Sequência de correção inválida.', 'err'); return; }
-    while(parsed.results.length < MISSIONS.length) parsed.results.push(null);
+    while(parsed.results.length < missionsFor(getActiveTest()).length) parsed.results.push(null);
 
     var original = round.results.slice();
     var prevCorrection = round.correction;
@@ -553,15 +552,17 @@
      principal (o armazenamento principal continua sendo o estado
      salvo via saveState/loadState). */
   function exportCsv(test){
-    var header = ['id','invalidada'].concat(MISSIONS.map(function(m){return m.id;})).concat(['nota','tags']);
-    var rows = [header.join(',')];
+    var testMissions = missionsFor(test);
+    var lines = ['#teste: ' + test.name, '#missoes: ' + testMissions.map(function(m){return m.name;}).join('|')];
+    var header = ['id','invalidada','tempo'].concat(testMissions.map(function(m){return m.name;})).concat(['nota','tags']);
+    lines.push(header.join(','));
     test.rounds.forEach(function(r){
-      var vals = r.results.map(function(v){ return v===null||v===undefined ? '' : (v?'S':'N'); });
+      var vals = r.results.map(function(v){ if(v===null||v===undefined) return ''; if(v===true) return 'S'; if(v===false) return 'N'; return Number(v).toFixed(4); });
       var noteEsc = '"' + (r.note||'').replace(/"/g,'""') + '"';
       var tagsEsc = '"' + (r.tags||[]).join('|') + '"';
-      rows.push([r.id, r.invalidated?1:0].concat(vals).concat([noteEsc, tagsEsc]).join(','));
+      lines.push([r.id, r.invalidated?1:0, typeof r.time === 'number' ? r.time : ''].concat(vals).concat([noteEsc, tagsEsc]).join(','));
     });
-    var blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8'});
+    var blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8'});
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -591,28 +592,38 @@
   }
 
   function importCsvText(text, suggestedName){
-    var lines = text.split(/\r?\n/).filter(function(l){ return l.trim() !== ''; });
+    var rawLines = text.split(/\r?\n/).filter(function(l){ return l.trim() !== ''; });
+    if(rawLines.length < 2){ printLine('Arquivo CSV vazio ou inválido.', 'err'); return; }
+    var testName = suggestedName, missionNames = null, offset = 0;
+    if(rawLines[0].indexOf('#teste:') === 0){ testName = rawLines[0].slice(7).trim() || suggestedName; offset++; }
+    if(rawLines[offset] && rawLines[offset].indexOf('#missoes:') === 0){ missionNames = rawLines[offset].slice(9).split('|').map(function(s){return s.trim();}).filter(Boolean); offset++; }
+    var lines = rawLines.slice(offset);
     if(lines.length < 2){ printLine('Arquivo CSV vazio ou inválido.', 'err'); return; }
     var header = parseCsvLine(lines[0]).map(function(h){ return h.trim().toLowerCase(); });
-    var missionCols = MISSIONS.map(function(m){ return header.indexOf(m.id); });
     var invalidCol = header.indexOf('invalidada');
+    var timeCol = header.indexOf('tempo');
     var noteCol = header.indexOf('nota');
     var tagsCol = header.indexOf('tags');
-    var t = createNewTest(suggestedName);
+    var reserved = {id:1,invalidada:1,tempo:1,nota:1,tags:1}, missionCols=[];
+    header.forEach(function(h,i){if(!reserved[h])missionCols.push(i);});
+    if(!missionNames) missionNames = missionCols.map(function(ci,i){return header[ci] || ('Missão '+(i+1));});
+    var t = createNewTest(testName, missionNames);
     var imported = [];
     for(var i=1;i<lines.length;i++){
       var cols = parseCsvLine(lines[i]);
-      var results = missionCols.map(function(ci){
-        if(ci === -1) return null;
+      var results = missionCols.slice(0,t.missions.length).map(function(ci){
         var v = (cols[ci]||'').trim().toUpperCase();
         if(v === 'S') return true;
         if(v === 'N') return false;
+        if(v !== '' && !isNaN(parseFloat(v))) return parseFloat(v);
         return null;
       });
+      while(results.length<t.missions.length) results.push(null);
       var invalidated = invalidCol !== -1 && /^(1|true)$/i.test((cols[invalidCol]||'').trim());
       var note = noteCol !== -1 ? cols[noteCol] : '';
       var tags = (tagsCol !== -1 && cols[tagsCol]) ? cols[tagsCol].split('|').filter(Boolean) : extractTags(note);
-      imported.push(makeRound(t.id, results, {invalidated:invalidated, note:note, tags:tags}));
+      var time = timeCol !== -1 && cols[timeCol] !== '' && !isNaN(parseFloat(cols[timeCol])) ? parseFloat(cols[timeCol]) : null;
+      imported.push(makeRound(t.id, results, {invalidated:invalidated, note:note, tags:tags, time:time}));
     }
     t.rounds = imported;
     saveState();
@@ -638,16 +649,16 @@
   var ghost = document.getElementById('term-ghost');
   var AUTOCOMPLETE_CMDS = [
     '/ajuda', '/help', '/teste', '/teste novo', '/missao', '/status', '/historico',
-    '/evolucao', '/relatorio', '/resetar confirmar',
+    '/relatorio', '/resetar confirmar', '/time',
     '/voltar', '/remover rodada ', '/remover teste',
     '/selecionar', '/sincronizar', '/csv exportar', '/csv importar',
-    'cd dashboard', 'cd evolucao', 'cd relatorios', 'cd dados', 'cd ajuda', 'cd terminal',
+    'cd dashboard', 'cd relatorios', 'cd dados', 'cd ajuda', 'cd terminal', 'cd time',
     'cls'
   ];
   var currentSuggestion = null;
 
   function escapeHtml(s){
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
   function computeSuggestion(val){
@@ -777,7 +788,7 @@
   }
 
   function refreshAllViews(){
-    renderDashboard(); renderEvolucao(); renderRelatorios();
+    renderDashboard(); renderRelatorios();
     if(VIEWS[currentView] === 'dados') renderDados();
   }
 

@@ -1,8 +1,8 @@
 "use strict";
 
   /* ============ View / routing state ============ */
-  var VIEWS = ['terminal','dashboard','evolucao','relatorios','dados','ajuda'];
-  var VIEW_LABELS = {terminal:'TERMINAL', dashboard:'DASHBOARD', evolucao:'EVOLUÇÃO', relatorios:'RELATÓRIOS', dados:'DADOS', ajuda:'AJUDA'};
+  var VIEWS = ['terminal','time','dashboard','relatorios','dados','ajuda'];
+  var VIEW_LABELS = {terminal:'TERMINAL', time:'TIME', dashboard:'DASHBOARD', relatorios:'RELATÓRIOS', dados:'DADOS', ajuda:'AJUDA'};
   var currentView = 0;
 
   function setView(idx, opts){
@@ -22,7 +22,7 @@
     document.getElementById('bottomnav-text').textContent = VIEW_LABELS[name];
     document.querySelectorAll('#bottomnav-dots i').forEach(function(d,i){ d.classList.toggle('on', i===idx); });
     if(name === 'dashboard') renderDashboard();
-    if(name === 'evolucao') renderEvolucao();
+    if(name === 'time') renderTimeTab();
     if(name === 'relatorios') renderRelatorios();
     if(name === 'dados') renderDados();
     if(name === 'ajuda') renderAjuda();
@@ -36,9 +36,11 @@
   document.getElementById('nav-right').addEventListener('click', function(){ setView(currentView+1); });
 
   document.addEventListener('keydown', function(e){
+    var home = document.getElementById('home-screen');
+    if(home && !home.classList.contains('hidden')) return;
     var input = document.getElementById('term-input');
     var typing = document.activeElement === input && input.value.length > 0;
-    if((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing){
+    if((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing && !modalOpen()){
       e.preventDefault();
       setView(currentView + (e.key === 'ArrowRight' ? 1 : -1));
     }

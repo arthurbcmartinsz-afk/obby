@@ -1,61 +1,76 @@
 "use strict";
 
   /* ============ Data model ============ */
-  var MISSIONS = [
-    {id:'m1', name:'Missão 1', label:'Rampa'},
-    {id:'m2', name:'Missão 2', label:'Entrega do Carrinho'},
-    {id:'m3', name:'Missão 3', label:'Triângulos'}
-  ];
-
-  var STORAGE_KEY = 'obby_data_v1';
+  var DEFAULT_MISSIONS = ['Missão 1 — Rampa', 'Missão 2 — Entrega do Carrinho', 'Missão 3 — Triângulos'];
+  var LEGACY_STORAGE_KEY = 'obby_data_v1';
+  var STORAGE_KEY = 'obby_data_v2';
+  var BACKUP_FORMAT = 'obby-backup';
+  var BACKUP_FORMAT_VERSION = 1;
 
   var TESTS = [];
   var generalNotes = [];
   var roundSeq = 0;
+  var testSeq = 0;
+  var stateExtras = {};
+  function missionsFor(test){
+    if(test && Array.isArray(test.missions) && test.missions.length) return test.missions;
+    return DEFAULT_MISSIONS.map(function(name, i){ return {id:'m'+(i+1), name:name}; });
+  }
 
-  /* ============ IndexedDB — cache local (seção 11 do espec) ============
-     Armazenamento principal estruturado (banco online, ex: PostgreSQL)
-     e sincronização entre contas/dispositivos dependem de um backend
-     real (API + servidor), que não existe neste protótipo estático —
-     por isso ficam marcados como pendentes na aba "Dados". O que É
-     possível fazer só no navegador é o cache local: aqui o OBBY usa
-     IndexedDB quando disponível (com localStorage como leitura/escrita
-     síncrona garantida no boot), espelhando cada saveState() também no
-     IndexedDB de forma assíncrona, sem bloquear a interface. */
+  /* IndexedDB is the preferred local store; localStorage is the synchronous
+     boot cache. Online sync still needs an API and a shared backend. */
   var STORAGE_BACKEND = (typeof window !== 'undefined' && window.indexedDB) ? 'indexeddb' : 'localStorage';
   var idbHandle = null;
-  if(STORAGE_BACKEND === 'indexeddb'){
+  var idbReady = false;
+  function openIdb(){
+    if(!window.indexedDB) return;
     try{
-      var idbReq = window.indexedDB.open('obby_db', 1);
-      idbReq.onupgradeneeded = function(e){
-        var db = e.target.result;
-        if(!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      var request = window.indexedDB.open('obby_db', 2);
+      request.onupgradeneeded = function(e){ if(!e.target.result.objectStoreNames.contains('kv')) e.target.result.createObjectStore('kv'); };
+      request.onsuccess = function(e){ idbHandle = e.target.result; idbReady = true; idbLoadThenReconcile(); };
+      request.onerror = function(){ idbHandle = null; };
+    }catch(e){ idbHandle = null; }
+  }
+  function idbLoadThenReconcile(){
+    if(!idbHandle) return;
+    try{
+      var request = idbHandle.transaction('kv','readonly').objectStore('kv').get(STORAGE_KEY);
+      request.onsuccess = function(){
+        var data = request.result;
+        if(data && Array.isArray(data.TESTS) && (data.roundSeq||0) >= roundSeq){
+          TESTS=data.TESTS; generalNotes=Array.isArray(data.generalNotes)?data.generalNotes:[];
+          stateExtras={}; Object.keys(data).forEach(function(key){if(['TESTS','generalNotes','roundSeq','testSeq'].indexOf(key)===-1)stateExtras[key]=data[key];});
+          roundSeq=data.roundSeq||0; testSeq=data.testSeq||computeTestSeq();
+          saveState();
+          refreshAllViewsSafe();
+        }else if(!data) idbMirrorSave();
       };
-      idbReq.onsuccess = function(e){ idbHandle = e.target.result; idbMirrorSave(); };
-      idbReq.onerror = function(){ STORAGE_BACKEND = 'localStorage'; };
-    }catch(e){ STORAGE_BACKEND = 'localStorage'; }
+    }catch(e){ /* best effort */ }
   }
   function idbMirrorSave(){
     if(!idbHandle) return;
     try{
       var tx = idbHandle.transaction('kv', 'readwrite');
-      tx.objectStore('kv').put({ TESTS: TESTS, generalNotes: generalNotes, roundSeq: roundSeq }, STORAGE_KEY);
-    }catch(e){ /* cache best-effort — localStorage continua sendo a fonte confiável */ }
+      tx.objectStore('kv').put(Object.assign({},stateExtras,{TESTS:TESTS,generalNotes:generalNotes,roundSeq:roundSeq,testSeq:testSeq}), STORAGE_KEY);
+    }catch(e){ /* best effort */ }
   }
 
+  function computeTestSeq(){ return TESTS.length ? Math.max.apply(null, TESTS.map(function(t){return t.id;})) : 0; }
   function nextRoundId(){ roundSeq += 1; return roundSeq; }
+  function nextTestId(){ testSeq += 1; return testSeq; }
 
   function makeRound(testId, results, opts){
     opts = opts || {};
     return {
       id: nextRoundId(),
       testId: testId,
-      results: results, // [bool|null, bool|null, bool|null]
+      results: results,
+      time: typeof opts.time === 'number' ? opts.time : null,
       invalidated: !!opts.invalidated,
       note: opts.note || '',
       tags: opts.tags || [],
       type: opts.type || 'full',
-      focusedMission: opts.focusedMission || null,
+      focusedMission: typeof opts.focusedMission === 'number' ? opts.focusedMission : null,
       correction: null
     };
   }
@@ -78,7 +93,7 @@
      é salva imediatamente, e recarregada ao abrir a página. */
   function saveState(){
     try{
-      var data = { TESTS: TESTS, generalNotes: generalNotes, roundSeq: roundSeq };
+      var data = Object.assign({},stateExtras,{TESTS:TESTS,generalNotes:generalNotes,roundSeq:roundSeq,testSeq:testSeq});
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }catch(e){
       console.warn('OBBY: não foi possível salvar os dados', e);
@@ -89,12 +104,20 @@
   function loadState(){
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
-      if(!raw) return false;
+      if(!raw) raw = localStorage.getItem(LEGACY_STORAGE_KEY);
       var data = JSON.parse(raw);
       if(!data || !Array.isArray(data.TESTS)) return false;
+      stateExtras={}; Object.keys(data).forEach(function(key){if(['TESTS','generalNotes','roundSeq','testSeq'].indexOf(key)===-1)stateExtras[key]=data[key];});
       TESTS = data.TESTS;
+      TESTS.forEach(function(test){
+        if(!Array.isArray(test.missions)) test.missions = DEFAULT_MISSIONS.map(function(name, i){return {id:'t'+test.id+'m'+(i+1),name:name};});
+        test.rounds = Array.isArray(test.rounds) ? test.rounds : [];
+        test.rounds.forEach(function(round){ if(typeof round.time !== 'number') round.time = null; });
+      });
       generalNotes = Array.isArray(data.generalNotes) ? data.generalNotes : [];
       roundSeq = typeof data.roundSeq === 'number' ? data.roundSeq : 0;
+      testSeq = typeof data.testSeq === 'number' ? data.testSeq : computeTestSeq();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign({},stateExtras,{TESTS:TESTS,generalNotes:generalNotes,roundSeq:roundSeq,testSeq:testSeq})));
       return true;
     }catch(e){
       console.warn('OBBY: não foi possível carregar os dados salvos', e);
@@ -102,12 +125,52 @@
     }
   }
 
+  /* Lê novamente a fonte persistida para que o backup preserve o JSON
+     original, inclusive campos que versões futuras do OBBY possam incluir. */
+  function readPersistedStateForBackup(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return null;
+      var state = JSON.parse(raw);
+      if(!state || typeof state !== 'object' || !Array.isArray(state.TESTS)) return null;
+      return state;
+    }catch(e){
+      console.warn('OBBY: não foi possível preparar o backup', e);
+      return null;
+    }
+  }
+
+  function hasPersistedDataForBackup(state){
+    if(!state) return false;
+    if(state.TESTS.length) return true;
+    if(Array.isArray(state.generalNotes) && state.generalNotes.length) return true;
+    if(typeof state.roundSeq === 'number' && state.roundSeq !== 0) return true;
+    return Object.keys(state).some(function(key){
+      return key !== 'TESTS' && key !== 'generalNotes' && key !== 'roundSeq' && key !== 'testSeq';
+    });
+  }
+
+  function createObbyBackup(){
+    var state = readPersistedStateForBackup();
+    if(!hasPersistedDataForBackup(state)) return null;
+    return {
+      format: BACKUP_FORMAT,
+      version: BACKUP_FORMAT_VERSION,
+      exportedAt: new Date().toISOString(),
+      storageKey: STORAGE_KEY,
+      state: state
+    };
+  }
+
   var hadSavedData = loadState();
+  openIdb();
 
   function wipeState(){
     TESTS = [];
     generalNotes = [];
     roundSeq = 0;
+    testSeq = 0;
+    stateExtras = {};
     saveState();
     ACTION_LOG = [];
   }
@@ -136,11 +199,13 @@
     return action;
   }
 
-  function createNewTest(name){
+  function createNewTest(name, missionNames){
     TESTS.forEach(function(t){ t.active = false; });
-    var nextId = TESTS.length ? Math.max.apply(null, TESTS.map(function(t){return t.id;})) + 1 : 1;
+    var nextId = nextTestId();
     var finalName = name || ('Teste ' + (nextId < 10 ? '0'+nextId : nextId));
-    var t = { id: nextId, name: finalName, rounds: [], active: true, tags: [] };
+    var names = missionNames && missionNames.length ? missionNames : DEFAULT_MISSIONS;
+    var missions = names.map(function(n, i){ return {id:'t'+nextId+'m'+(i+1), name:n || ('Missão '+(i+1))}; });
+    var t = { id: nextId, name: finalName, rounds: [], active: true, missions: missions, tags: [] };
     TESTS.push(t);
     saveState();
     pushAction('criar teste "' + t.name + '"', function(){
@@ -153,17 +218,24 @@
   /* ============ Stats helpers ============ */
   function validRounds(rounds){ return rounds.filter(function(r){ return !r.invalidated; }); }
 
+  function resultValue(value){
+    if(value === null || value === undefined) return null;
+    if(value === true) return 1;
+    if(value === false) return 0;
+    return value;
+  }
+
   function missionPercent(rounds, idx){
-    var relevant = validRounds(rounds).filter(function(r){ return r.results[idx] !== null && r.results[idx] !== undefined; });
-    if(!relevant.length) return null;
-    var succ = relevant.filter(function(r){ return r.results[idx]; }).length;
-    return Math.round(succ / relevant.length * 100);
+    var vals = [];
+    validRounds(rounds).forEach(function(r){ var value = resultValue(r.results[idx]); if(value !== null) vals.push(value); });
+    if(!vals.length) return null;
+    return Math.round(vals.reduce(function(a,b){return a+b;},0) / vals.length * 100);
   }
 
   function overallPercent(rounds){
     var vals = [];
     validRounds(rounds).forEach(function(r){
-      r.results.forEach(function(v){ if(v !== null && v !== undefined) vals.push(v ? 1 : 0); });
+      r.results.forEach(function(v){ var value = resultValue(v); if(value !== null) vals.push(value); });
     });
     if(!vals.length) return null;
     return Math.round(vals.reduce(function(a,b){return a+b;},0) / vals.length * 100);

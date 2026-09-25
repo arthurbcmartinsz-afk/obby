@@ -2,7 +2,7 @@
 
 **Sistema web para registrar e analisar os dados de testes do robô TBR.**
 
-O OBBY organiza os testes realizados com o robô e transforma os resultados das rodadas em indicadores para acompanhar o desempenho ao longo do tempo. Cada rodada pode registrar o resultado das três missões avaliadas:
+O OBBY organiza os testes realizados com o robô e transforma os resultados das rodadas em indicadores para acompanhar o desempenho. Cada teste pode configurar suas próprias missões; os testes antigos usam Rampa, Entrega do Carrinho e Triângulos.
 
 1. **Missão 1 — Rampa**
 2. **Missão 2 — Entrega do Carrinho**
@@ -13,11 +13,12 @@ O OBBY organiza os testes realizados com o robô e transforma os resultados das 
 - Registra testes e rodadas pelo terminal integrado.
 - Guarda o resultado de cada missão como sucesso (`S`) ou falha (`N`), além de observações e tags.
 - Permite invalidar uma rodada e corrigir um resultado com justificativa.
-- Mostra percentuais por missão e no geral, evolução entre testes, últimas rodadas e relatórios.
+- Mostra percentuais por missão e no geral, últimas rodadas, relatórios e tempos medidos pelo cronômetro.
+- Combina dois testes pela média simples das missões correspondentes, preservando os originais.
 - Filtra registros por teste, missão e tags.
 - Importa e exporta os dados de um teste em CSV.
 
-O backup completo no formato próprio `.obby`, mencionado na interface, ainda está planejado e não foi implementado.
+O backup completo no formato próprio `.obby` reúne todos os testes e demais dados persistidos naquele navegador em um único arquivo legível.
 
 ## Como executar
 
@@ -39,13 +40,13 @@ Depois, abra <http://localhost:8000> no navegador.
    /teste novo Teste de 21/09
    ```
 
-2. Registre os resultados das missões na ordem M1, M2 e M3. Por exemplo, `S N S` registra sucesso na Rampa, falha na Entrega do Carrinho e sucesso nos Triângulos. Uma observação pode acompanhar a rodada:
+2. Registre os resultados das missões na ordem em que aparecem no teste. Por exemplo, em um teste com as missões Rampa, Entrega do Carrinho e Triângulos, `S N S` registra sucesso, falha e sucesso, nessa ordem. Uma observação pode acompanhar a rodada:
 
    ```text
    S N S # ajustar a velocidade na rampa
    ```
 
-3. Use as abas **Dashboard**, **Evolução** e **Relatórios** para acompanhar os resultados. A aba **Dados** permite importar ou exportar CSV.
+3. Use as abas **Time**, **Dashboard** e **Relatórios** para acompanhar os resultados. Na aba **Time**, Espaço inicia/pausa o cronômetro e Enter prepara o tempo para a próxima rodada. A aba **Dados** permite criar e selecionar testes, sincronizá-los, importar/exportar CSV e baixar um backup completo.
 
 Digite `/ajuda` no terminal ou abra a aba **Ajuda** para consultar os comandos disponíveis.
 
@@ -59,15 +60,37 @@ Digite `/ajuda` no terminal ou abra a aba **Ajuda** para consultar os comandos d
 | `# observação` | Adiciona uma observação geral ao teste ativo |
 | `!12 S S N # motivo` | Corrige os resultados da rodada 12 e registra o motivo |
 | `/selecionar 2` | Seleciona o teste de ID 2 |
+| `/select *` | Abre a janela de seleção de testes |
+| `/time` | Abre a aba do cronômetro |
 | `/csv exportar [id]` | Exporta o teste ativo ou o teste indicado |
 | `/csv importar` | Importa um CSV como um novo teste |
 | `/voltar` | Pede confirmação e desfaz a última alteração da sessão |
 
 ## Armazenamento atual
 
-Os dados são salvos no navegador, usando `localStorage`; quando disponível, o OBBY também tenta manter uma cópia auxiliar no IndexedDB. O carregamento atual é feito a partir do `localStorage`.
+Os dados são salvos no navegador em `localStorage` e, quando disponível, também no IndexedDB. No carregamento, o IndexedDB pode atualizar o cache local quando contém um estado mais recente. Dados da versão anterior `obby_data_v1` são copiados para `obby_data_v2` na primeira abertura desta versão.
 
 Esse armazenamento é local ao navegador e à origem do site. Por isso, os dados ainda não são compartilhados entre navegadores, dispositivos ou integrantes da equipe, e podem ser perdidos se os dados do navegador forem apagados. O CSV permite guardar os dados de cada teste, mas não substitui um backup completo do estado do navegador.
+
+## Como exportar os dados antes da migração
+
+Cada integrante deve repetir estes passos em **cada navegador ou perfil** no qual usou o OBBY:
+
+1. Abra o OBBY pela mesma origem/endereço usado para registrar os testes.
+2. Acesse a aba **Dados**.
+3. Na seção **Backup completo**, clique em **Exportar backup completo (.obby)**.
+4. Guarde o arquivo baixado e entregue-o sem editar seu conteúdo.
+
+Se o botão estiver desativado, aquele navegador não possui dados salvos para exportar. O download não modifica nem apaga os dados locais. A exportação CSV continua disponível separadamente para testes individuais.
+
+O `.obby` é um arquivo JSON UTF-8 legível. Ele contém:
+
+- `format` e `version`, que identificam a versão do formato de backup;
+- `exportedAt`, com a data e hora da exportação;
+- `storageKey`, com a chave de origem no navegador;
+- `state`, com o estado persistido original: `TESTS`, `generalNotes`, `roundSeq`, `testSeq` e quaisquer outros campos que estejam salvos.
+
+Dentro de `state`, são preservados IDs, vínculos, ordem das listas, missões configuradas, resultados booleanos, fracionários ou nulos, tempos, observações, tags, invalidações e correções. A pilha temporária do comando `/voltar` não aparece no arquivo, pois existe apenas na memória da página e não sobrevive a uma recarga. O backup exporta a cópia reconciliada do `localStorage`.
 
 O OBBY ainda não possui API nem banco de dados online. A sincronização entre navegadores é o principal objetivo do roadmap de backend abaixo.
 
@@ -77,8 +100,8 @@ O OBBY ainda não possui API nem banco de dados online. A sincronização entre 
 
 ### 1. Exportar e entender os dados atuais
 
-- [ ] Mapear o estado `obby_data_v1`: testes (ID, nome, ativo e tags), rodadas (ID, teste, resultados, invalidação, observação, tags, tipo, missão foco e correção com original, resultado corrigido e motivo), observações gerais e contador de rodadas.
-- [ ] Implementar a exportação completa `.obby` diretamente dos dados salvos no navegador. O CSV atual exporta um teste por vez e não é suficiente para a migração integral.
+- [x] Mapear o estado `obby_data_v1`: testes (ID, nome, ativo e tags), rodadas (ID, teste, resultados, invalidação, observação, tags, tipo, missão foco e correção com original, resultado corrigido e motivo), observações gerais e contador de rodadas.
+- [x] Implementar a exportação completa `.obby` diretamente dos dados salvos no navegador. O CSV atual exporta um teste por vez e não é suficiente para a migração integral.
 - [ ] Analisar exportações reais dos navegadores da equipe para confirmar o significado dos campos, os vínculos entre registros e as necessidades do backend antes de fechar o modelo MySQL.
 
 ### 2. Modelar e migrar para MySQL

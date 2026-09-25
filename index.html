@@ -9,6 +9,12 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<div id="home-screen">
+  <div id="home-title">OBB<span>_Y</span></div>
+  <div id="home-sub">Robot Test System</div>
+  <button id="home-enter" type="button">Enter →</button>
+  <div id="home-hint">ou pressione Enter no teclado</div>
+</div>
 <div id="app">
 
   <div id="topbar">
@@ -17,10 +23,11 @@
       <div class="sub">Robot Test System</div>
     </div>
     <div id="path">OBBY:~<span class="seg" id="path-seg">/terminal</span>$</div>
+    <div id="topbar-actions"></div>
     <div id="tabs">
       <button data-view="terminal"><span class="num">01</span> Terminal</button>
-      <button data-view="dashboard"><span class="num">02</span> Dashboard</button>
-      <button data-view="evolucao"><span class="num">03</span> Evolução</button>
+      <button data-view="time"><span class="num">02</span> Time</button>
+      <button data-view="dashboard"><span class="num">03</span> Dashboard</button>
       <button data-view="relatorios"><span class="num">04</span> Relatórios</button>
       <button data-view="dados"><span class="num">05</span> Dados</button>
       <button data-view="ajuda"><span class="num">06</span> Ajuda</button>
@@ -28,9 +35,28 @@
   </div>
 
   <main>
+    <section class="view" id="view-time">
+      <div class="view-header">
+        <div class="view-title"><span class="idx">02/</span>Time</div>
+        <div class="view-hint">Espaço inicia/pausa/continua · Enter conclui</div>
+      </div>
+      <div id="time-panel">
+        <div class="time-info-row">
+          <div class="time-info-block"><div class="ti-label">Teste</div><div class="ti-value" id="tv-test">—</div></div>
+          <div class="time-info-block"><div class="ti-label">Missão</div><div class="ti-value" id="tv-mission">—</div></div>
+          <div class="time-info-block"><div class="ti-label">Rodada</div><div class="ti-value" id="tv-round">—</div></div>
+        </div>
+        <div class="time-prev-row" id="tv-prev"></div>
+        <div class="time-display-big" id="time-display">0.0</div>
+        <div class="time-ready" id="time-ready"></div>
+        <div class="time-hint-row"><span><kbd>Espaço</kbd> iniciar / pausar / continuar</span><span><kbd>Enter</kbd> concluir</span></div>
+        <button type="button" class="btn ghost small" id="tm-reset">Resetar</button>
+      </div>
+    </section>
+
     <section class="view" id="view-dashboard">
       <div class="view-header">
-        <div class="view-title"><span class="idx">02/</span>Dashboard</div>
+        <div class="view-title"><span class="idx">03/</span>Dashboard</div>
         <div class="view-hint" id="dash-testname"></div>
       </div>
       <div class="grid-missions" id="mission-cards"></div>
@@ -38,20 +64,6 @@
       <div class="attn-list" id="attn-list"></div>
       <div class="section-label">Últimas rodadas</div>
       <div class="rounds-strip" id="last-rounds"></div>
-    </section>
-
-    <section class="view" id="view-evolucao">
-      <div class="view-header">
-        <div class="view-title"><span class="idx">03/</span>Evolução</div>
-        <div class="view-hint">por teste</div>
-      </div>
-      <div id="evo-controls"></div>
-      <div id="chart-wrap">
-        <svg id="chart-svg" viewBox="0 0 640 240" preserveAspectRatio="none" style="width:100%;height:220px;display:block;"></svg>
-        <div id="evo-legend"></div>
-      </div>
-      <div class="section-label">Por teste</div>
-      <table class="evo-table" id="evo-table"></table>
     </section>
 
     <section class="view" id="view-relatorios">
@@ -75,14 +87,22 @@
       </div>
       <div class="section-label">Armazenamento</div>
       <div id="storage-status" class="stat-grid"></div>
+      <div class="dados-toolbar">
+        <button class="btn primary" id="btn-novo-teste">+ Novo Teste</button>
+        <button class="btn ghost" id="dados-import-btn">Importar CSV</button>
+      </div>
       <div class="section-label">Testes</div>
       <div id="dados-tests-list"></div>
       <div class="section-label">Backup completo</div>
-      <div class="attn-list">
-        <div class="attn-item">
-          <span class="ic">i</span>
-          <span>Formato próprio <b>.obby</b> (backup completo: testes, rodadas, comentários, tags e histórico) — planejado, ainda não implementado nesta versão.</span>
+      <div class="backup-card">
+        <div>
+          <div class="backup-title">Backup deste navegador</div>
+          <p>Cada navegador e perfil guarda seus próprios dados. Baixe um arquivo em cada navegador usado pela equipe para reunir todos os registros antes da migração. O backup é apenas baixado; nada é enviado para um servidor.</p>
         </div>
+        <button type="button" id="dados-backup-btn">Exportar backup completo (.obby)</button>
+        <div id="dados-backup-feedback" class="backup-feedback" role="status" aria-live="polite"></div>
+      </div>
+      <div class="attn-list">
         <div class="attn-item">
           <span class="ic">i</span>
           <span>Conta/projeto com acesso aos mesmos dados em vários dispositivos (via API + banco online) — depende de um backend real e ainda não existe neste protótipo. Hoje os dados ficam somente neste dispositivo/navegador.</span>
@@ -117,6 +137,7 @@
     </div>
   </div>
 
+  <div class="modal-overlay hidden" id="modal-overlay"><div class="modal-panel" id="modal-panel"></div></div>
   <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:none">
 
   <div id="bottomnav">
